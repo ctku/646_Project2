@@ -175,3 +175,5 @@ extern int wb_int(wb_port_int_t [], int, int);
 extern int wb_fp(wb_port_fp_t [], int, int);
 
 const op_info_t *decode_instr(int, int *);
+extern void perform_operation(int, operand_t, operand_t, operand_t *);
+

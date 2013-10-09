@@ -572,133 +572,132 @@ fu_fp_read(fu_fp_t **fu_fp_list,FILE *file) {
 /* Functions to allocate functional units */
 int
 issue_fu_int(fu_int_t *fu_list, int tag, int branch, int link) {
-  fu_int_t *fu;
-  fu_int_stage_t *stage;
+	fu_int_t *fu;
+	fu_int_stage_t *stage;
 
-  fu = fu_list;
-  while (fu != NULL) {
-    stage = fu->stage_list;
-    while (stage->prev != NULL)
-      stage = stage->prev;
-    if (stage->current_cycle == -1) {
-      stage->current_cycle = stage->num_cycles-1;
-      stage->tag = tag;
-      stage->branch = branch;
-      stage->link = link;
-      return 0;
-    }
-    fu = fu->next;
-  }
-  return -1;   // structural hazard... stall
+	fu = fu_list;
+	while (fu != NULL) {
+		stage = fu->stage_list;
+		while (stage->prev != NULL)
+			stage = stage->prev;
+		if (stage->current_cycle == -1) {
+			stage->current_cycle = stage->num_cycles-1;
+			stage->tag = tag;
+			stage->branch = branch;
+			stage->link = link;
+			return 0;
+		}
+		fu = fu->next;
+	}
+	return -1;   // structural hazard... stall
 }
 
 
 int
 issue_fu_mem(fu_mem_t *fu_list, int tag, int float_mem, int store) {
-  fu_mem_t *fu;
-  fu_mem_stage_t *stage;
+	fu_mem_t *fu;
+	fu_mem_stage_t *stage;
 
-  fu = fu_list;
-  while (fu != NULL) {
-    stage = fu->stage_list;
-    while (stage->prev != NULL)
-      stage = stage->prev;
-    if (stage->current_cycle == -1) {
-      if (store)
-	/* stores are issued in commit, so they'll go through 1
-	   execute in the same cycle */
-	stage->current_cycle = stage->num_cycles;
-      else
-	stage->current_cycle = stage->num_cycles-1;
-      stage->tag = tag;
-      stage->float_mem = float_mem;
-      stage->store = store;
-      return 0;
-    }
-    fu = fu->next;
-  }
-  return -1;   // structural hazard... stall
+	fu = fu_list;
+	while (fu != NULL) {
+		stage = fu->stage_list;
+		while (stage->prev != NULL)
+			stage = stage->prev;
+		if (stage->current_cycle == -1) {
+			if (store)
+			/* stores are issued in commit, so they'll go through 1
+				execute in the same cycle */
+				stage->current_cycle = stage->num_cycles;
+			else
+				stage->current_cycle = stage->num_cycles-1;
+			stage->tag = tag;
+			stage->float_mem = float_mem;
+			stage->store = store;
+			return 0;
+		}
+		fu = fu->next;
+	}
+	return -1;   // structural hazard... stall
 }
 
 
 int
 issue_fu_fp(fu_fp_t *fu_list, int tag) {
-  fu_fp_t *fu;
-  fu_fp_stage_t *stage;
+	fu_fp_t *fu;
+	fu_fp_stage_t *stage;
 
-  fu = fu_list;
-  while (fu != NULL) {
-    stage = fu->stage_list;
-    while (stage->prev != NULL)
-      stage = stage->prev;
-    if (stage->current_cycle == -1) {
-      stage->current_cycle = stage->num_cycles-1;
-      stage->tag = tag;
-      return 0;
-    }
-    fu = fu->next;
-  }
-  return -1;   // structural hazard... stall
+	fu = fu_list;
+	while (fu != NULL) {
+		stage = fu->stage_list;
+		while (stage->prev != NULL)
+			stage = stage->prev;
+		if (stage->current_cycle == -1) {
+			stage->current_cycle = stage->num_cycles-1;
+			stage->tag = tag;
+			return 0;
+		}
+		fu = fu->next;
+	}
+	return -1;   // structural hazard... stall
 }
 
 
 /* functions to cycle functional units */
 void
-advance_fu_int(fu_int_t *fu_list, wb_port_int_t wb_port[], int wb_port_num,
-	       int *branch_tag) {
-  fu_int_t *fu;
-  fu_int_stage_t *stage, *next_stage;
-  int i;
+advance_fu_int(fu_int_t *fu_list, wb_port_int_t wb_port[], int wb_port_num, int *branch_tag) {
+	fu_int_t *fu;
+	fu_int_stage_t *stage, *next_stage;
+	int i;
 
-  fu = fu_list;
-  while(fu != NULL) {
-    stage = fu->stage_list;
-    next_stage = NULL;
-    while (stage != NULL) {
-      switch (stage->current_cycle) {
-	/* is fu stage free? */
-      case -1:
-	break;                                      /* do nothing */
+	fu = fu_list;
+	while(fu != NULL) {
+		stage = fu->stage_list;
+		next_stage = NULL;
+		while (stage != NULL) {
+			switch (stage->current_cycle) {
+			/* is fu stage free? */
+			case -1:
+				break;                                      /* do nothing */
 
-	/* is fu stage done processing? */
-      case 0:
-	if (next_stage == NULL) {                    /* is this the last stage in the fu? */
-	  if (stage->branch) {
-	    if (*branch_tag == -1) {
-	      if (stage->link) {
-		if (wb_int(wb_port, wb_port_num, stage->tag) == 0) {
-		  stage->current_cycle = -1;
-		  *branch_tag = stage->tag;
+			/* is fu stage done processing? */
+			case 0:
+				if (next_stage == NULL) {                    /* is this the last stage in the fu? */
+					if (stage->branch) {
+						if (*branch_tag == -1) {
+							if (stage->link) {
+								if (wb_int(wb_port, wb_port_num, stage->tag) == 0) {
+									stage->current_cycle = -1;
+									*branch_tag = stage->tag;
+								}
+							} else {
+								stage->current_cycle = -1;
+								*branch_tag = stage->tag;
+							}
+						}
+					} else {
+						if (wb_int(wb_port, wb_port_num, stage->tag) == 0)
+							stage->current_cycle = -1;
+					}
+				} else {
+					if (next_stage->current_cycle == -1) {     /* move to next fu stage */
+						next_stage->tag = stage->tag;
+						next_stage->current_cycle = next_stage->num_cycles-1;
+						next_stage->branch = stage->branch;
+						next_stage->link = stage->link;
+						stage->current_cycle = -1;
+					}
+				}
+				break;
+
+			/*  fu stage is still processing */
+			default:
+				stage->current_cycle--;
+			}
+			next_stage = stage;
+			stage = stage->prev;
 		}
-	      } else {
-		stage->current_cycle = -1;
-		*branch_tag = stage->tag;
-	      }
-	    }
-	  } else {
-	    if (wb_int(wb_port, wb_port_num, stage->tag) == 0)
-	      stage->current_cycle = -1;
-	  }
-	} else {
-	  if (next_stage->current_cycle == -1) {     /* move to next fu stage */
-	    next_stage->tag = stage->tag;
-	    next_stage->current_cycle = next_stage->num_cycles-1;
-	    next_stage->branch = stage->branch;
-	    next_stage->link = stage->link;
-	    stage->current_cycle = -1;
-	  }
+		fu = fu->next;
 	}
-	break;
-
-	/*  fu stage is still processing */
-      default:
-	stage->current_cycle--;
-      }
-      next_stage = stage;
-      stage = stage->prev;
-    }
-    fu = fu->next;
-  }
 }
 
 void
@@ -838,4 +837,97 @@ decode_instr(int instr, int *use_imm) {
     *use_imm = 0;
   }
   return op_info;
+}
+
+/* perform an instruction */
+void
+perform_operation(int instr, operand_t operand1, operand_t operand2, operand_t *result) // result added
+{
+	const op_info_t *op_info;
+	int use_imm, offset;
+
+	op_info = decode_instr(instr, &use_imm);
+	switch (op_info->fu_group_num) {
+	case FU_GROUP_INT:
+		switch (op_info->operation) {
+		case OPERATION_ADD:
+			result->integer.w = operand1.integer.w + operand2.integer.w;
+			break;
+		case OPERATION_ADDU:
+			result->integer.wu = operand1.integer.wu + operand2.integer.wu;
+			break;
+		case OPERATION_SUB:
+			result->integer.w = operand1.integer.w - operand2.integer.w;
+			break;
+		case OPERATION_SUBU:
+			result->integer.wu = operand1.integer.wu - operand2.integer.wu;
+			break;
+		case OPERATION_SLL:
+			result->integer.w = operand1.integer.w << operand2.integer.w;
+			break;
+		case OPERATION_SRL:
+			result->integer.w = operand1.integer.w >> operand2.integer.w;
+			break;
+		case OPERATION_AND:
+			result->integer.w = operand1.integer.w & operand2.integer.w;
+			break;
+		case OPERATION_OR:
+			result->integer.w = operand1.integer.w | operand2.integer.w;
+			break;
+		case OPERATION_XOR:
+			result->integer.w = operand1.integer.w ^ operand2.integer.w;
+			break;
+		case OPERATION_SLT:
+			result->integer.w = (operand1.integer.w < operand2.integer.w);
+			break;
+		case OPERATION_SLTU:
+			result->integer.wu = (operand1.integer.wu < operand2.integer.wu);
+			break;
+		case OPERATION_SGT:
+			result->integer.w = (operand1.integer.w > operand2.integer.w);
+			break;
+		case OPERATION_SGTU:
+			result->integer.wu = (operand1.integer.wu > operand2.integer.wu);
+			break;
+		}
+		break;
+	case FU_GROUP_ADD:
+		switch (op_info->operation) {
+		case OPERATION_ADD:
+			result->flt = operand1.flt + operand2.flt;
+			break;
+		case OPERATION_SUB:
+			result->flt = operand1.flt - operand2.flt;
+			break;
+		}
+	case FU_GROUP_MULT:
+		switch (op_info->operation) {
+		case OPERATION_MULT:
+			result->flt = operand1.flt * operand2.flt;
+			break;
+		}
+		break;
+	case FU_GROUP_DIV:
+		switch (op_info->operation) {
+		case OPERATION_DIV:
+			result->flt = operand1.flt / operand2.flt;
+			break;
+		}
+		break;
+	case FU_GROUP_MEM:
+		result->integer.wu = operand1.integer.wu + operand2.integer.wu;
+		break;
+	case FU_GROUP_BRANCH:
+		break;
+
+	case FU_GROUP_HALT:
+		break;
+
+	case FU_GROUP_NONE:
+		break;
+
+	case FU_GROUP_INVALID:
+		fprintf(stderr, "error: invalid opcode (instr = %.8X)\n", instr);
+	}
+
 }

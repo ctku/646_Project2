@@ -5,6 +5,22 @@
  * Donald Yeung
  */
 
+//#define DEBUG
+#ifdef DEBUG
+#define dprintf(fmt,...) fprintf(stdout,fmt,__VA_ARGS__)
+#else
+#define dprintf(fmt,...)
+#endif
+
+// used by windows
+#define ENDIAN	LITTLE_ENDIAN
+// used by glue server
+//#define ENDIAN	BIG_ENDIAN//
+
+#define BIG_ENDIAN	1
+#define LITTLE_ENDIAN	2
+
+#define IQ_BASE	64
 
 #define TRUE 1
 #define FALSE 0

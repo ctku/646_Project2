@@ -52,6 +52,9 @@ main(int argc, char *argv[]) {
   /* main sim loop */
   for (i = 0, num_insn = 0; TRUE; i++) {
 
+	if (i==1)
+		i = i;
+
     printf("\n\n*** CYCLE %d\n", i);
     print_state(state, data_count);
 
@@ -60,6 +63,10 @@ main(int argc, char *argv[]) {
     execute(state);
     memory_disambiguation(state);
     issue(state);
+
+	if (i==14) //15,285,430
+			break;
+
     if (!(state->fetch_lock)) {
       dispatch(state);
       fetch(state);
