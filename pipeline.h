@@ -5,7 +5,7 @@
  * Donald Yeung
  */
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define dprintf(fmt,...) fprintf(stdout,fmt,__VA_ARGS__)
 #else
@@ -119,6 +119,12 @@ typedef struct _state_t {
   int branch_tag;
 
   int fetch_lock;
+#define STRUCT_HAZARD 5
+#define CTRL_HAZARD 4
+#define DATA_HAZARD 3
+#define HALT 2
+#define TRUE 1
+#define FALSE 0
 } state_t;
 
 extern state_t *state_create(int *,FILE *,FILE *,int,int);
