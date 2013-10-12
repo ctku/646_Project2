@@ -28,7 +28,7 @@ static FILE *bin_file,*fu_file;
 static int wbpi = -1;
 static int wbpf = -1;
 
-
+int cc = 0;
 /************************************************************/
 int
 main(int argc, char *argv[]) {
@@ -51,8 +51,8 @@ main(int argc, char *argv[]) {
 
   /* main sim loop */
   for (i = 0, num_insn = 0; TRUE; i++) {
-
-	if (i==6)
+	cc = i;
+	if (i==11)
 		i = i;
 
     printf("\n\n*** CYCLE %d\n", i);

@@ -146,7 +146,7 @@ ROB:
  [E]
  [M]
  [I]
- [I] IQ 0 issued = TRUE
+ [I] issued instr no 0 
  [D]
  [F]
 
@@ -202,7 +202,7 @@ ROB:
  [E]
  [M]
  [I]
- [I] IQ 1 issued = TRUE
+ [I] issued instr no 1 
  [D]
  [F]
 
@@ -261,7 +261,7 @@ ROB:
  [E]
  [M]
  [I]
- [I] IQ 2 issued = TRUE
+ [I] issued instr no 2 
  [D]
  [F]
 
@@ -442,7 +442,7 @@ ROB:
  [E]
  [M]
  [I]
- [I] IQ 3 issued = TRUE
+ [I] issued instr no 3 
  [D]
  [F]
 
@@ -503,7 +503,7 @@ ROB:
  [E]
  [M]
  [I]
- [I] IQ 5 issued = TRUE
+ [I] issued instr no 5 
 
 
 *** CYCLE 9
@@ -561,7 +561,7 @@ ROB:
  [E]
  [M]
  [I]
- [I] IQ 4 issued = TRUE
+ [I] issued instr no 4 
 
 
 *** CYCLE 10
@@ -702,7 +702,7 @@ IQ:
 CQ:
 INT fu:
 MEM fu:
-		name 'MEM', stage 0 (from end), cycle 1/1, TAG = -60
+		name 'MEM', stage 0 (from end), cycle 1/1, TAG = 5
 ADD fu:
 MULT fu:
 DIV fu:
@@ -711,7 +711,7 @@ floating writeback ports:
 branch PC update:
 ROB:
 		4  SUB R5 R4 R3  COMPLETED
-		5  SW R5 (40)R0  NOT COMPLETED
+		5  SW R5 (40)R0  COMPLETED
 		6  HALT  COMPLETED
 
  [C]
@@ -729,7 +729,7 @@ Memory
 	0x00000020	00 00 00 1E 00 00 00 14 00 00 00 00
 Registers (integer):
 	R0=0x00000000	R1=0x00000032	R2=0x0000001E	R3=0x00000014
-	R4=0x00000050	R5=0x00000000	R6=0x00000000	R7=0x00000000
+	R4=0x00000050	R5=0x0000003C	R6=0x00000000	R7=0x00000000
 	R8=0x00000000	R9=0x00000000	R10=0x00000000	R11=0x00000000
 	R12=0x00000000	R13=0x00000000	R14=0x00000000	R15=0x00000000
 	R16=0x00000000	R17=0x00000000	R18=0x00000000	R19=0x00000000
@@ -753,7 +753,7 @@ IQ:
 CQ:
 INT fu:
 MEM fu:
-		name 'MEM', stage 0 (from end), cycle 0/1, TAG = -60
+		name 'MEM', stage 0 (from end), cycle 0/1, TAG = 5
 ADD fu:
 MULT fu:
 DIV fu:
@@ -761,7 +761,7 @@ integer writeback ports:
 floating writeback ports:
 branch PC update:
 ROB:
-		5  SW R5 (40)R0  NOT COMPLETED
+		5  SW R5 (40)R0  COMPLETED
 		6  HALT  COMPLETED
 
  [C]
@@ -779,7 +779,7 @@ Memory
 	0x00000020	00 00 00 1E 00 00 00 14 00 00 00 00
 Registers (integer):
 	R0=0x00000000	R1=0x00000032	R2=0x0000001E	R3=0x00000014
-	R4=0x00000050	R5=0x00000000	R6=0x00000000	R7=0x00000000
+	R4=0x00000050	R5=0x0000003C	R6=0x00000000	R7=0x00000000
 	R8=0x00000000	R9=0x00000000	R10=0x00000000	R11=0x00000000
 	R12=0x00000000	R13=0x00000000	R14=0x00000000	R15=0x00000000
 	R16=0x00000000	R17=0x00000000	R18=0x00000000	R19=0x00000000
@@ -810,7 +810,6 @@ integer writeback ports:
 floating writeback ports:
 branch PC update:
 ROB:
-		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
  [C]

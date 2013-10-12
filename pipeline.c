@@ -113,44 +113,22 @@ get_dest_reg_idx(int instr, int *is_int)
 	return idx;
 }
 
-int
-get_idx_by_match_ROB_with_dest_reg(state_t *state, int src_is_int, int src_reg_idx, operand_t *result)
-{
-	int dst_is_int, dst_reg_idx, i;
-
-	(*result).integer.w = 0;
-	for (i=state->ROB_head; i<state->ROB_tail; i++) {
-		dst_reg_idx = get_dest_reg_idx(state->ROB[i].instr, &dst_is_int);
-		if ((src_is_int == dst_is_int) && (src_reg_idx == dst_reg_idx)) {
-			if (state->ROB[i].completed)
-				*result = state->ROB[i].result;
-			return i;
-		}
-	}
-
-	return -1;
-}
 
 void
-get_operands(state_t *state, int instr, operand_t *op1, operand_t *op2, int *tag1, int *tag2, int reg_renaming)
+get_operands(state_t *state, int instr, operand_t *op1, operand_t *op2)
 {
 	const op_info_t *op_info;
 	int use_imm = 0;
 	unsigned int r1 = 0, r2 = 0, r3 = 0, imm = 0;
-	operand_t operand;
-
 	rf_int_t *rf_int = &state->rf_int;
 	rf_fp_t *rf_fp = &state->rf_fp;
 
 	op_info = decode_instr(instr, &use_imm);
 	r1 = FIELD_R1(instr);
 	r2 = FIELD_R2(instr);
-	r2 = FIELD_R2(instr);
 	imm = FIELD_IMM(instr);
 
-	*tag1 = -1;
-	*tag2 = -1;
-
+	// perform operation
 	if (use_imm) {
 		if (op_info->name == NULL)
 			;
@@ -159,22 +137,10 @@ get_operands(state_t *state, int instr, operand_t *op1, operand_t *op2, int *tag
 			case FU_GROUP_INT:
 				*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
 				*op2 = *(operand_t *)&(imm);
-				if (reg_renaming && (r1 != 0)) {
-					*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-					rf_int->tag[r1] = *tag1;
-					if (*tag1 != -1)
-						*op1 = operand;
-				}
 				break;
 			case FU_GROUP_MEM:
 				*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
 				*op2 = *(operand_t *)&(imm);
-				if (reg_renaming && (r1 != 0)) {
-					*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-					rf_int->tag[r1] = *tag1;
-					if (*tag1 != -1)
-						*op1 = operand;
-				}
 				break;
 			case FU_GROUP_BRANCH:
 				switch(op_info->operation) {
@@ -182,40 +148,16 @@ get_operands(state_t *state, int instr, operand_t *op1, operand_t *op2, int *tag
 					break;
 				case OPERATION_JR:
 					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
-					if (reg_renaming && (r1 != 0)) {
-						*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-						rf_int->tag[r1] = *tag1;
-						if (*tag1 != -1)
-							*op1 = operand;
-					}
 				case OPERATION_JAL:
 					break;
 				case OPERATION_JALR:
 					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
-					if (reg_renaming && (r1 != 0)) {
-						*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-						rf_int->tag[r1] = *tag1;
-						if (*tag1 != -1)
-							*op1 = operand;
-					}
 					break;
 				case OPERATION_BEQZ:
 					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
-					if (reg_renaming && (r1 != 0)) {
-						*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-						rf_int->tag[r1] = *tag1;
-						if (*tag1 != -1)
-							*op1 = operand;
-					}
 					break;
 				case OPERATION_BNEZ:
 					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
-					if (reg_renaming && (r1 != 0)) {
-						*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-						rf_int->tag[r1] = *tag1;
-						if (*tag1 != -1)
-							*op1 = operand;
-					}
 					break;
 				}
 				break;
@@ -229,50 +171,205 @@ get_operands(state_t *state, int instr, operand_t *op1, operand_t *op2, int *tag
 			case FU_GROUP_INT:
 				*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
 				*op2 = *(operand_t *)&rf_int->reg_int.integer[r2];
-				if (reg_renaming && (r1 != 0)) {
-					*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 1, r1, &operand);
-					rf_int->tag[r1] = *tag1;
-					if (*tag1 != -1)
-						*op1 = operand;
-				}
-				if (reg_renaming && (r2 != 0)) {
-					*tag2 = get_idx_by_match_ROB_with_dest_reg(state, 1, r2, &operand);
-					rf_int->tag[r2] = *tag2;
-					if (*tag2 != -1)
-						*op2 = operand;
-				}
 				break;
 			case FU_GROUP_ADD:
 			case FU_GROUP_MULT:
 			case FU_GROUP_DIV:
 				*op1 = *(operand_t *)&rf_fp->reg_fp.flt[r1];
 				*op2 = *(operand_t *)&rf_fp->reg_fp.flt[r2];
-				if (reg_renaming) {
-					*tag1 = get_idx_by_match_ROB_with_dest_reg(state, 0, r1, &operand);
-					rf_fp->tag[r1] = *tag1;
-					if (*tag1 != -1)
-						*op1 = operand;
-					*tag2 = get_idx_by_match_ROB_with_dest_reg(state, 0, r2, &operand);
-					rf_fp->tag[r2] = *tag2;
-					if (*tag2 != -1)
-						*op2 = operand;
-				}
 				break;
 			}
 		}
 	}
 }
 
-void
-get_operands_with_register_renaming(state_t *state, int instr, operand_t *op1, operand_t *op2, int *tag1, int *tag2)
-{
-	get_operands(state, instr, op1, op2, tag1, tag2, 1);
-}
 
 void
-get_operands_without_register_renaming(state_t *state, int instr, operand_t *op1, operand_t *op2, int *tag1, int *tag2)
+dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_idx, operand_t *op1, operand_t *op2, int *tg1, int *tg2)
 {
-	get_operands(state, instr, op1, op2, tag1, tag2, 0);
+	const op_info_t *op_info;
+	int use_imm = 0;
+	unsigned int r1 = 0, r2 = 0, r3 = 0, imm = 0;
+	operand_t operand, dontcare;
+
+	rf_int_t *rf_int = &state->rf_int;
+	rf_fp_t *rf_fp = &state->rf_fp;
+
+	op_info = decode_instr(instr, &use_imm);
+	r1 = FIELD_R1(instr);
+	r2 = FIELD_R2(instr);
+	r3 = FIELD_R3(instr);
+	imm = FIELD_IMM(instr);
+
+	dontcare.integer.w = 0;
+	*op1 = *(operand_t *)&dontcare;
+	*tg1 = -1;
+	*op2 = *(operand_t *)&dontcare;
+	*tg2 = -1;
+
+	if (use_imm) {
+		if (op_info->name == NULL)
+			;
+		else {
+			switch(op_info->fu_group_num) {
+			case FU_GROUP_INT:
+				// op1 / tg1
+				if (rf_int->tag[r1] == -1) {
+					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
+					*tg1 = -1;
+				} else {
+					if (state->ROB[rf_int->tag[r1]].completed) {
+						*op1 = state->ROB[rf_int->tag[r1]].result;
+						*tg1 = -1;
+					} else {
+						*op1 = *(operand_t *)&dontcare;
+						*tg1 = rf_int->tag[r1];
+					}
+				}
+				// op2 / tg2
+				*op2 = *(operand_t *)&(imm);
+				*tg2 = -1;
+				// dst
+				rf_int->tag[r2] = ROB_idx;
+				break;
+			case FU_GROUP_MEM:
+				// op1 / tg1
+				if (rf_int->tag[r1] == -1) {
+					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
+					*tg1 = -1;
+				} else {
+					if (state->ROB[rf_int->tag[r1]].completed) {
+						*op1 = state->ROB[rf_int->tag[r1]].result;
+						*tg1 = -1;
+					} else {
+						*op1 = *(operand_t *)&dontcare;
+						*tg1 = rf_int->tag[r1];
+					}
+				}
+				// op2 / tg2
+				*op2 = *(operand_t *)&(imm);
+				*tg2 = -1;
+				// dst
+				switch(op_info->data_type) {
+				case DATA_TYPE_W:
+					switch(op_info->operation) {
+					case OPERATION_LOAD://LW
+						rf_int->tag[r2] = ROB_idx;
+						break;
+					case OPERATION_STORE://SW
+						// ?
+						break;
+					}
+					break;
+				case DATA_TYPE_F:
+					switch(op_info->operation) {
+					case OPERATION_LOAD://L.S
+						rf_fp->tag[r2] = ROB_idx;
+						break;
+					case OPERATION_STORE://S.S
+						// ?
+						break;
+					}
+					break;
+				}
+				break;
+			case FU_GROUP_BRANCH:
+				switch(op_info->operation) {
+				case OPERATION_J:
+				case OPERATION_JAL:
+					break;
+				case OPERATION_JR:
+				case OPERATION_JALR:
+				case OPERATION_BEQZ:
+				case OPERATION_BNEZ:
+					// op1 / tg1
+					if (rf_int->tag[r1] == -1) {
+						*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
+						*tg1 = -1;
+					} else {
+						if (state->ROB[rf_int->tag[r1]].completed) {
+							*op1 = state->ROB[rf_int->tag[r1]].result;
+							*tg1 = -1;
+						} else {
+							*op1 = *(operand_t *)&dontcare;
+							*tg1 = rf_int->tag[r1];
+						}
+					}
+					break;
+				}
+				break;
+			}
+		}
+	} else {
+		if(op_info->name == NULL)
+			;
+		else {
+			switch(op_info->fu_group_num) {
+			case FU_GROUP_INT:
+				// op1 / tg1
+				if (rf_int->tag[r1] == -1) {
+					*op1 = *(operand_t *)&rf_int->reg_int.integer[r1];
+					*tg1 = -1;
+				} else {
+					if (state->ROB[rf_int->tag[r1]].completed) {
+						*op1 = state->ROB[rf_int->tag[r1]].result;
+						*tg1 = -1;
+					} else {
+						*op1 = *(operand_t *)&dontcare;
+						*tg1 = rf_int->tag[r1];
+					}
+				}
+				// op2 / tg2
+				if (rf_int->tag[r2] == -1) {
+					*op2 = *(operand_t *)&rf_int->reg_int.integer[r2];
+					*tg2 = -1;
+				} else {
+					if (state->ROB[rf_int->tag[r2]].completed) {
+						*op2 = state->ROB[rf_int->tag[r2]].result;
+						*tg2 = -1;
+					} else {
+						*op2 = *(operand_t *)&dontcare;
+						*tg2 = rf_int->tag[r2];
+					}
+				}
+				// dst
+				rf_int->tag[r3] = ROB_idx;
+				break;
+			case FU_GROUP_ADD:
+			case FU_GROUP_MULT:
+			case FU_GROUP_DIV:
+				// op1 / tg1
+				if (rf_fp->tag[r1] == -1) {
+					*op1 = *(operand_t *)&rf_fp->reg_fp.flt[r1];
+					*tg1 = -1;
+				} else {
+					if (state->ROB[rf_fp->tag[r1]].completed) {
+						*op1 = state->ROB[rf_fp->tag[r1]].result;
+						*tg1 = -1;
+					} else {
+						*op1 = *(operand_t *)&dontcare;
+						*tg1 = rf_fp->tag[r1];
+					}
+				}
+				// op2 / tg2
+				if (rf_fp->tag[r2] == -1) {
+					*op2 = *(operand_t *)&rf_fp->reg_fp.flt[r2];
+					*tg2 = -1;
+				} else {
+					if (state->ROB[rf_fp->tag[r2]].completed) {
+						*op2 = state->ROB[rf_fp->tag[r2]].result;
+						*tg2 = -1;
+					} else {
+						*op2 = *(operand_t *)&dontcare;
+						*tg2 = rf_fp->tag[r2];
+					}
+				}
+				// dst
+				rf_fp->tag[r3] = ROB_idx;
+				break;
+			}
+		}
+	}
 }
 
 int
@@ -321,14 +418,15 @@ writeback(state_t *state) {
 	// ROB stores complete instr as they enter IQ and CQ from dispatch stage
 
 	//For each integer instruction, find
-	//its corresponding entry in the ¡§ROB¡¨ (the tag field in wb port int specifies the index in the
+	// its corresponding entry in the ¡§ROB¡¨ (the tag field in wb port int specifies the index in the
 	//¡§ROB¡¨ where the instruction resides). Set the completed flag to TRUE. Remember, the result of
-	//the instruction was already computed when you issued the instruction (see Section 4.3); you are
-	//only marking the completion of the instruction.
+	// the instruction was already computed when you issued the instruction (see Section 4.3); you are
+	// only marking the completion of the instruction.
 	//One exception is the ADDI portion of a load or
-	//store instruction. The writeback of this part should not set the completed flag to TRUE because
-	//only the effective address has completed; you should set the completed flag to TRUE for loads and
-	//stores only when the entire memory operation has finished.
+	// store instruction. The writeback of this part should not set the completed flag to TRUE because
+	// only the effective address has completed; you should set the completed flag to TRUE for loads and
+	// stores only when the entire memory operation has finished.
+	// (1)
 	for (i = 0; i < state->wb_port_int_num; i++) {
 		if (state->wb_port_int[i].tag == -1)
 			continue;
@@ -339,54 +437,25 @@ writeback(state_t *state) {
 
 		state->ROB[state->wb_port_int[i].tag].completed = TRUE;
 	}
-
+	if (cc==7)
+		cc = cc;
 	//If a match is found, deposit the result
     //of the instruction into the appropriate operand field in the IQ or CQ, and set the corresponding
     //tag field to -1, signaling to the issue stage that this operand is now ready.
 	for (i = 0; i < state->wb_port_int_num; i ++) {
 		if (state->wb_port_int[i].tag == -1)
 			continue;
+		//(2)
 		for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
 			cur_CQ = &state->CQ[cq];
-			ok = 0;
-			if (cur_CQ->tag1 == state->wb_port_int[i].tag) {
-				if (cur_CQ->tag1 > ROB_SIZE) {
-					ok = 1;
-				} else {
-					int instr = cur_CQ->instr;
-					int dst_idx, is_int;
-					dst_idx = get_dest_reg_idx(cur_CQ->instr, &is_int);
-					if (is_int) {
-						if (state->rf_int.tag[dst_idx] == -1)
-							ok = 1;
-					}
-				}
-				if (ok) {
-					// save "original tag" in "result" for mem_disambiguation to issue 
-					cur_CQ->result.integer.w = cur_CQ->tag1 - ROB_SIZE;
-					cur_CQ->tag1 = -1;
-				}
-			}
-			ok = 0;
-			if (cur_CQ->tag2 == state->wb_port_int[i].tag) {
-				if (cur_CQ->tag2 > ROB_SIZE) {
-					ok = 1;
-				} else {
-					int instr = cur_CQ->instr;
-					int dst_idx, is_int;
-					dst_idx = get_dest_reg_idx(cur_CQ->instr, &is_int);
-					if (is_int) {
-						if (state->rf_int.tag[dst_idx] == -1)
-							ok = 1;
-					}
-				}
-				if (ok) {
-					// save "original tag" in "result" for mem_disambiguation to issue 
-					cur_CQ->result.integer.w = cur_CQ->tag2 - ROB_SIZE;
-					cur_CQ->tag2 = -1;
-				}
-			}
+			if (cur_CQ->tag1 == state->wb_port_int[i].tag)
+				cur_CQ->tag1 = -1;
+			if (cur_CQ->tag2 == state->wb_port_int[i].tag)
+				cur_CQ->tag2 = -1;
+			if ((cur_CQ->store) && (cur_CQ->tag1 == -1) && (cur_CQ->tag2 == -1))
+				state->ROB[cur_CQ->ROB_index].completed = TRUE;
 		}
+		//(3)
 		for (iq = state->IQ_head; iq < state->IQ_tail; iq++) {
 			cur_IQ = &state->IQ[iq];
 			if (cur_IQ->tag1 == state->wb_port_int[i].tag) {
@@ -421,67 +490,12 @@ execute(state_t *state) {
 	if (state->if_id.instr == 0)
 		return;
 
-	// update ROB target & result by perform operation (id fetch_locked, instr is garbage)
-	if (state->fetch_lock == FALSE) {
-		get_operands_without_register_renaming(state, state->if_id.instr, &op1, &op2, &tag1, &tag2);
-		perform_operation(state->if_id.instr, op1, op2, &result);
-		op_info = decode_instr(state->if_id.instr, &use_imm);
-		if (op_info->fu_group_num == FU_GROUP_MEM) {
-			state->ROB[state->ROB_tail].target = result;
-			state->ROB[state->ROB_tail].result = result;
-		} else {
-			state->ROB[state->ROB_tail].result = result;
-		}
-	}
 	// advance function unit
 	advance_fu_int(state->fu_int_list, state->wb_port_int, state->wb_port_int_num, &branch_tag);
 	advance_fu_fp(state->fu_add_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_fp(state->fu_mult_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_fp(state->fu_div_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_mem(state->fu_mem_list, state->wb_port_int, state->wb_port_int_num, state->wb_port_fp, state->wb_port_fp_num);
-
-	// update result right after execution for ROB which has been stalled
-	for (i = 0; i < state->wb_port_int_num; i ++) {
-		int rob = state->wb_port_int[i].tag;
-		int instr = state->ROB[rob].instr;
-		op_info = decode_instr(instr, &use_imm);
-
-		if (rob == -1)
-			continue;
-
-		if (op_info->fu_group_num == FU_GROUP_MEM) {
-			// a mem fu from store or load just finished
-			switch(op_info->data_type) {
-			case DATA_TYPE_W:
-				switch(op_info->operation) {
-				case OPERATION_LOAD://LW
-					state->ROB[rob].result.integer.wu = load_4bytes(state->mem, state->ROB[rob].result.integer.w);
-					//state->rf_int.reg_int.integer[FIELD_R2(instr)].wu = state->ROB[rob].result.integer.wu;
-					break;
-				case OPERATION_STORE://SW
-					//store_4bytes(mem, result.integer.wu, rf_int->reg_int[r2].wu);
-					break;
-				}
-				break;
-			case DATA_TYPE_F:
-				switch(op_info->operation) {
-				case OPERATION_LOAD://L.S
-					val = load_4bytes(state->mem, state->ROB[rob].result.integer.w);
-					state->ROB[rob].result.flt = *(float *)(&val);
-					//state->rf_fp.reg_fp.flt[FIELD_R2(instr)] = state->ROB[rob].result.flt;
-					break;
-				case OPERATION_STORE://S.S
-					//store_4bytes(mem, result.integer.wu, *(int *)&rf_fp->reg_fp[r2]);
-					break;
-				}
-			}
-		} else {
-			// other fu from just finished
-			get_operands_without_register_renaming(state, instr, &op1, &op2, &tag1, &tag2);
-			perform_operation(instr, op1, op2, &result);
-			state->ROB[rob].result = result;
-		}
-	}
 
 }
 
@@ -503,8 +517,10 @@ memory_disambiguation(state_t *state) {
 	// control instr's wb slot is branch_tag; instr move to this field when complete
 	// no need for arbitration of branch_tag, since only one control instr possibly in-flight
 
-	int cq, cq2, is_int, issue = 0;
+	int cq, cq2, is_int, issue = 0, use_imm, rob, forward, issue_ret, val;
 	CQ_t *cur_CQ, *cur_CQ2;
+	ROB_t *cur_ROB;
+	const op_info_t *op_info;
 
 	dprintf(" [M]\n");
 
@@ -541,18 +557,56 @@ memory_disambiguation(state_t *state) {
 
 	// issue mem fu
 	if (issue == 1) {
-		int issue_ret;
 		// get is_int
 		get_dest_reg_idx(cur_CQ->instr, &is_int);
 		// issue
-		issue_ret = issue_fu_mem(state->fu_mem_list, cur_CQ->result.integer.w, !is_int, cur_CQ->store);
-		// issue at most one instruction
+		issue_ret = issue_fu_mem(state->fu_mem_list, cur_CQ->ROB_index, !is_int, cur_CQ->store);
 		if (issue_ret == 0) {
 			cur_CQ->issued = TRUE;
 			state->CQ_head = (state->CQ_head + 1) % CQ_SIZE;
-			//if (cur_CQ->store) {
-				//state->ROB[cur_CQ->tag1].completed = TRUE; // need to be verified
-			//}
+			op_info = decode_instr(cur_CQ->instr, &use_imm);
+
+			if (cur_CQ->store) {
+				// store
+				// Hence, when issuing a store in the memory disambiguation stage, 
+				// (1) immediately set the completed bit in the corresponding ROB entry to TRUE
+				state->ROB[cur_CQ->ROB_index].completed = TRUE;
+				// (2) place the store value in the result field of the ROB entry.
+				if (op_info->data_type == DATA_TYPE_W) {
+					// SW
+					state->ROB[cur_CQ->ROB_index].result.integer.w = state->rf_int.reg_int.integer[FIELD_R2(cur_CQ->instr)].w;
+				} else {
+					// S.S
+					state->ROB[cur_CQ->ROB_index].result.flt = state->rf_fp.reg_fp.flt[FIELD_R2(cur_CQ->instr)];
+				}
+			} else { 
+				// load
+				// you should first check the ROB to see if an earlier completed store is writing the same memory location.
+				forward = 0;
+				for (rob = state->ROB_head; rob < cur_CQ->ROB_index; rob ++) {
+					cur_ROB = &state->ROB[rob];
+					op_info = decode_instr(cur_ROB->instr, &use_imm);
+					if ((cur_ROB->completed) && (op_info->operation == OPERATION_STORE)) {
+						if (cur_CQ->address.integer.w == cur_ROB->target.integer.w) {
+							// forward the store value to the load instead of loading the value from memory.
+							cur_CQ->result = cur_ROB->result;
+							forward = 1;
+							break;
+						}
+					}
+				}
+				if (!forward) {
+					// loading the value from memory (ROB.target saved in issue) 
+					if (op_info->data_type == DATA_TYPE_W) {
+						//LW
+						state->ROB[cur_CQ->ROB_index].result.integer.wu = load_4bytes(state->mem, state->ROB[cur_CQ->ROB_index].target.integer.w);
+					} else {
+						//L.S.
+						val = load_4bytes(state->mem, state->ROB[cur_CQ->ROB_index].target.integer.w);
+						state->ROB[cur_CQ->ROB_index].result.flt = *(float *)(&val);
+					}
+				}
+			}
 		}
 	}
 }
@@ -560,8 +614,10 @@ memory_disambiguation(state_t *state) {
 
 int
 issue(state_t *state) {
-	int use_imm, issue_ret = -1, iq, cq, tag = -1, instr;
+	int use_imm, issue_ret = -1, iq, cq, tag = -1, instr, tag1, tag2;
 	const op_info_t *op_info;
+	operand_t op1, op2, result;
+	IQ_t *cur_IQ;
 
 	// scan IQ every cycle, search ready instr to issue to fu
 	// ready for issue when both operands available
@@ -569,19 +625,15 @@ issue(state_t *state) {
 	dprintf(" [I]\n");
 
 	for (iq = state->IQ_head; iq < state->IQ_tail; iq ++) {
-		if ((state->IQ[iq].tag1 == -1) && (state->IQ[iq].tag2 == -1)) {
-			instr = state->IQ[iq].instr;
-			op_info = decode_instr(instr, &use_imm);
+		cur_IQ = &state->IQ[iq];
+		if ((cur_IQ->tag1 == -1) && (cur_IQ->tag2 == -1)) {
+			op_info = decode_instr(cur_IQ->instr, &use_imm);
 			// get tag
 			if (op_info->fu_group_num == FU_GROUP_MEM) {
-				for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
-					if (instr == state->CQ[cq].instr)
-						tag = state->CQ[cq].tag1;
-				}
+				tag = cur_IQ->ROB_index + ROB_SIZE;
 			} else {
-				tag = state->IQ[iq].ROB_index;
+				tag = cur_IQ->ROB_index;
 			}
-			
 			switch (op_info->fu_group_num) {
 			case FU_GROUP_INT:
 			case FU_GROUP_MEM:
@@ -606,10 +658,20 @@ issue(state_t *state) {
 			}
 			// issue at most one instruction? no
 			if (issue_ret == 0) {
-				dprintf(" [I] IQ %d issued = TRUE\n", iq);
-				state->IQ[iq].issued = TRUE;
-				//state->IQ_head ++; //TBD (should it be compact?)
-				//break;
+				dprintf(" [I] issued instr no %d \n", cur_IQ->ROB_index);
+				cur_IQ->issued = TRUE;
+				if (cc==7)
+					cc = cc;
+				// perform operation also
+				// update ROB target & result by perform operation (id fetch_locked, instr is garbage)
+				//get_operands(state, cur_IQ->instr, &op1, &op2);
+				perform_operation(cur_IQ->instr, cur_IQ->operand1, cur_IQ->operand2, &result);
+				op_info = decode_instr(cur_IQ->instr, &use_imm);
+				if (op_info->fu_group_num == FU_GROUP_MEM) {
+					state->ROB[cur_IQ->ROB_index].target = result;
+				} else {
+					state->ROB[cur_IQ->ROB_index].result = result;
+				}
 			}
 		}
 	}
@@ -637,6 +699,9 @@ dispatch(state_t *state) {
 	operand_t operand1, operand2;
 
 	dprintf(" [D]\n");
+
+	if (cc==4)
+		cc = cc;
 
 	op_info = decode_instr(state->if_id.instr, &use_imm);
 	if (op_info->fu_group_num == FU_GROUP_NONE) // NOP
@@ -688,7 +753,7 @@ dispatch(state_t *state) {
 		cur_IQ->pc = state->pc;
 		cur_IQ->issued = FALSE;
 		cur_IQ->ROB_index = state->ROB_tail;
-		get_operands_with_register_renaming(state, cur_IQ->instr, &operand1, &operand2, &tag1, &tag2);
+		dispatch_get_operands_with_register_renaming(state, cur_IQ->instr, cur_IQ->ROB_index, &operand1, &operand2, &tag1, &tag2);
 		cur_IQ->operand1 = operand1;
 		cur_IQ->operand2 = operand2;
 		cur_IQ->tag1 = tag1;//v TBD (need to assign waited in-flight instr idx in ROB)

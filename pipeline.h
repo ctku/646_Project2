@@ -25,6 +25,7 @@
 #define TRUE 1
 #define FALSE 0
 
+extern int cc;
 
 /* fetch/decode pipeline register */
 typedef struct _if_id_t {
