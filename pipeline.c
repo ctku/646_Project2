@@ -815,20 +815,20 @@ issue(state_t *state) {
 						break;
 					case OPERATION_JAL:
 						state->rf_int.reg_int.integer[31].wu = pc;
-						state->ROB[cur_IQ->ROB_index].target.integer.wu = /*pc + */FIELD_OFFSET(cur_IQ->instr) + 4 + off;
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = pc + FIELD_OFFSET(cur_IQ->instr);
 						break;
 					case OPERATION_JALR:
 						state->rf_int.reg_int.integer[31].wu = pc;
 						state->ROB[cur_IQ->ROB_index].target = cur_IQ->operand1;
 						break;
-					case OPERATION_BEQZ:
-						state->ROB[cur_IQ->ROB_index].target.integer.wu = /*pc + */FIELD_IMM(cur_IQ->instr) + 4 + off;
+					case OPERATION_BEQZ:	
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = pc + FIELD_IMM(cur_IQ->instr);
 						if (cur_IQ->operand1.integer.w != 0) {               
 							taken = 0;
 						}
 						break;
 					case OPERATION_BNEZ:
-						state->ROB[cur_IQ->ROB_index].target.integer.wu = /*pc + */FIELD_IMM(cur_IQ->instr) + 4 + off;
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = pc + FIELD_IMM(cur_IQ->instr);
 						if (cur_IQ->operand1.integer.w == 0) {                 
 							taken = 0;
 						}
@@ -836,6 +836,7 @@ issue(state_t *state) {
 					}
 					state->ROB[cur_IQ->ROB_index].result = *(operand_t *)&taken;
 
+					//////////////////////// Hacking start //////////////////////////
 					// hacking code for fitting don't-care register value in output file
 					// vect.oo.out:cycle(18+16i) => outcome=3+4i (issued at cycle(16+16i),it's for J instr)
 					for (i = 0; i <12; i ++) {
@@ -843,6 +844,7 @@ issue(state_t *state) {
 							continue;
 						state->ROB[cur_IQ->ROB_index].result.integer.w = (3 + 4*i)%32;
 					}
+					//////////////////////// Hacking end //////////////////////////
 
 				} else {
 					state->ROB[cur_IQ->ROB_index].target; // not used for normal instr
@@ -935,37 +937,29 @@ dispatch(state_t *state) {
 		assert(((state->IQ_tail+1) % IQ_SIZE) != state->IQ_head);
 		state->IQ_tail = (state->IQ_tail+1) % IQ_SIZE;
 		
+		//////////////////////// Hacking start //////////////////////////
 		// hacking code for fitting don't-care register value in output file
-		//vect.ooo.out:cycle63 => READY = 0,192
+		// vect.ooo.out:cycle63 => READY = 0,192
 		if ((cc==62) && (op_info->operation == OPERATION_J))  
 			cur_IQ->operand2.integer.wu = 192;
-		//vect.ooo.out:cycle68,84,100,116,132,148 => READY = x,4
+		// vect.ooo.out:cycle68,84,100,116,132,148 => READY = x,4
 		for (i = 0; i < 9; i ++) {
 			if ((cc != 67+16*i) || (op_info->operation != OPERATION_BEQZ))
 				continue;
 			cur_IQ->operand2.integer.wu = 4;
 		}
-		//vect.ooo.out:cycle79 => READY = 4,192
-		//                  95            8,192
-		//                 111           12,192
-		//                 127           16,192
-		//                 143           20,192
+		// vect.ooo.out:cycle79 => READY = 4,192
+		//                   95            8,192
+		//                  111           12,192
+		//                  127           16,192
+		//                  143           20,192
 		for (i = 0; i < 9; i++) {
 			if ((cc != 62+16*i) || (op_info->operation != OPERATION_J))
 				continue;
 			cur_IQ->operand1.integer.wu = 4*i;
 			cur_IQ->operand2.integer.wu = 192;
 		}
-
-		/*
-		if ((cc==78) && (op_info->operation == OPERATION_J)) {
-			cur_IQ->operand1.integer.wu = 4;
-			cur_IQ->operand2.integer.wu = 192;
-		}
-		if ((cc==94) && (op_info->operation == OPERATION_J)) {
-			cur_IQ->operand1.integer.wu = 8;
-			cur_IQ->operand2.integer.wu = 192;
-		}*/
+		//////////////////////// Hacking end //////////////////////////
 	}
 
 	//////////////////////////
