@@ -40,13 +40,6 @@ floating writeback ports:
 branch PC update:
 ROB:
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [D]
- [F]
 
 
 *** CYCLE 1
@@ -89,13 +82,6 @@ floating writeback ports:
 branch PC update:
 ROB:
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [D]
- [F]
 
 
 *** CYCLE 2
@@ -141,14 +127,6 @@ branch PC update:
 ROB:
 		0  LW R1 (28)R0  NOT COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [I] issued instr no 0 
- [D]
- [F]
 
 
 *** CYCLE 3
@@ -197,14 +175,6 @@ ROB:
 		0  LW R1 (28)R0  NOT COMPLETED
 		1  LW R2 (32)R0  NOT COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [I] issued instr no 1 
- [D]
- [F]
 
 
 *** CYCLE 4
@@ -256,14 +226,6 @@ ROB:
 		1  LW R2 (32)R0  NOT COMPLETED
 		2  LW R3 (36)R0  NOT COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [I] issued instr no 2 
- [D]
- [F]
 
 
 *** CYCLE 5
@@ -316,13 +278,6 @@ ROB:
 		2  LW R3 (36)R0  NOT COMPLETED
 		3  ADD R4 R1 R2  NOT COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [D]
- [F]
 
 
 *** CYCLE 6
@@ -376,13 +331,6 @@ ROB:
 		3  ADD R4 R1 R2  NOT COMPLETED
 		4  SUB R5 R4 R3  NOT COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [D]
- [F]
 
 
 *** CYCLE 7
@@ -437,14 +385,6 @@ ROB:
 		4  SUB R5 R4 R3  NOT COMPLETED
 		5  SW R5 (40)R0  NOT COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [I] issued instr no 3 
- [D]
- [F]
 
 
 *** CYCLE 8
@@ -498,12 +438,6 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [I] issued instr no 5 
 
 
 *** CYCLE 9
@@ -556,12 +490,6 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
- [I] issued instr no 4 
 
 
 *** CYCLE 10
@@ -611,11 +539,6 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
 
 
 *** CYCLE 11
@@ -663,11 +586,6 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
 
 
 *** CYCLE 12
@@ -702,7 +620,6 @@ IQ:
 CQ:
 INT fu:
 MEM fu:
-		name 'MEM', stage 0 (from end), cycle 1/1, TAG = 5
 ADD fu:
 MULT fu:
 DIV fu:
@@ -714,11 +631,6 @@ ROB:
 		5  SW R5 (40)R0  COMPLETED
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
 
 
 *** CYCLE 13
@@ -753,7 +665,6 @@ IQ:
 CQ:
 INT fu:
 MEM fu:
-		name 'MEM', stage 0 (from end), cycle 0/1, TAG = 5
 ADD fu:
 MULT fu:
 DIV fu:
@@ -764,11 +675,6 @@ ROB:
 		5  SW R5 (40)R0  COMPLETED
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
 
 
 *** CYCLE 14
@@ -776,7 +682,7 @@ Memory
 	Address		Data
 	0x00000000	8C 01 00 1C 8C 02 00 20 8C 03 00 24 00 22 20 20
 	0x00000010	00 83 28 22 AC 05 00 28 FC 00 00 00 00 00 00 32
-	0x00000020	00 00 00 1E 00 00 00 14 00 00 00 00
+	0x00000020	00 00 00 1E 00 00 00 14 00 00 00 3C
 Registers (integer):
 	R0=0x00000000	R1=0x00000032	R2=0x0000001E	R3=0x00000014
 	R4=0x00000050	R5=0x0000003C	R6=0x00000000	R7=0x00000000
@@ -803,6 +709,7 @@ IQ:
 CQ:
 INT fu:
 MEM fu:
+		name 'MEM', stage 0 (from end), cycle 0/1, TAG = 5
 ADD fu:
 MULT fu:
 DIV fu:
@@ -812,11 +719,6 @@ branch PC update:
 ROB:
 		6  HALT  COMPLETED
 
- [C]
- [W]
- [E]
- [M]
- [I]
 SIMULATION COMPLETE!
-COMMITTED 0 INSTRUCTIONS IN 14 CYCLES
-CPI:  1.#J
+COMMITTED 7 INSTRUCTIONS IN 14 CYCLES
+CPI:  2.00

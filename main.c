@@ -52,20 +52,20 @@ main(int argc, char *argv[]) {
   /* main sim loop */
   for (i = 0, num_insn = 0; TRUE; i++) {
 	cc = i;
-	if (i==11)
-		i = i;
 
     printf("\n\n*** CYCLE %d\n", i);
     print_state(state, data_count);
 
-    commit(state);
+    commit_ret = commit(state);
+	if (commit_ret != 0)
+		num_insn ++;
+	if (commit_ret == -1)
+		break;
+
     writeback(state);
     execute(state);
     memory_disambiguation(state);
     issue(state);
-
-	if (i==14) //15,285,430
-			break;
 
     if (!(state->fetch_lock)) {
       dispatch(state);

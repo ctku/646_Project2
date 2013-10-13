@@ -11,6 +11,14 @@
 #include "pipeline.h"
 #include <string.h>
 
+void store_4bytes(unsigned char *mem, int idx, int data)
+{
+	mem[idx] = (data & 0xFF000000) >> 24; 
+	mem[idx+1] = (data & 0xFF0000) >> 16;
+	mem[idx+2] = (data & 0xFF00) >> 8;
+	mem[idx+3] = (data & 0xFF);
+
+}
 
 int load_4bytes(unsigned char *mem, int idx)
 {
@@ -375,7 +383,8 @@ dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_
 int
 commit(state_t *state) {
 	// commits oldest instr (at head of ROB) into reg file or mem(for store instr)
-	int reg_idx, is_int;
+	int reg_idx, is_int, use_imm, issue_ret;
+	const op_info_t *op_info;
 	ROB_t *cur_ROB = &state->ROB[state->ROB_head];
 
 	dprintf(" [C]\n");
@@ -384,8 +393,15 @@ commit(state_t *state) {
 		return 0;
 
 	if (cur_ROB->completed) {
+		op_info = decode_instr(cur_ROB->instr, &use_imm);
+
+		// commit HALT terminate the simulation by return -1
+		if (op_info->fu_group_num == FU_GROUP_HALT)
+			return -1;
+
 		reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
 		if (reg_idx != -1) {
+			// (1) write the result into the register file
 			if (is_int) {
 				if (state->rf_int.tag[reg_idx] == state->ROB_head) {
 					state->rf_int.reg_int.integer[reg_idx].w = cur_ROB->result.integer.w;
@@ -397,10 +413,29 @@ commit(state_t *state) {
 					state->rf_fp.tag[reg_idx] = -1;
 				}
 			}
+
+			// store need extra handling here
+			if (op_info->operation == OPERATION_STORE) {
+				// issue the store to mem
+				reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
+				issue_ret = issue_fu_mem(state->fu_mem_list, state->ROB_head, !is_int, 1);
+				// copy value to memory
+				if (is_int) {
+					store_4bytes(state->mem, cur_ROB->target.integer.wu, state->rf_int.reg_int.integer[reg_idx].wu);
+				} else {
+					store_4bytes(state->mem, cur_ROB->target.integer.wu, *(int *)&state->rf_fp.reg_fp.flt[reg_idx]);
+				}
+			}
+
+			// advance ROB_head
 			state->ROB_head = (state->ROB_head + 1) % ROB_SIZE;
+
+			// one instr committed
+			return 1;
 		}
 	}
 
+	return 0;
 }
 
 
@@ -416,6 +451,9 @@ writeback(state_t *state) {
 	// scan wb_port_int & wb_port_fp & branch_tag for complete instr.
 	// write result into ROB
 	// ROB stores complete instr as they enter IQ and CQ from dispatch stage
+
+	if (cc==11)
+		cc = cc;
 
 	//For each integer instruction, find
 	// its corresponding entry in the ¡§ROB¡¨ (the tag field in wb port int specifies the index in the
@@ -437,20 +475,19 @@ writeback(state_t *state) {
 
 		state->ROB[state->wb_port_int[i].tag].completed = TRUE;
 	}
-	if (cc==7)
-		cc = cc;
+
 	//If a match is found, deposit the result
-    //of the instruction into the appropriate operand field in the IQ or CQ, and set the corresponding
-    //tag field to -1, signaling to the issue stage that this operand is now ready.
+	//of the instruction into the appropriate operand field in the IQ or CQ, and set the corresponding
+	//tag field to -1, signaling to the issue stage that this operand is now ready.
 	for (i = 0; i < state->wb_port_int_num; i ++) {
 		if (state->wb_port_int[i].tag == -1)
 			continue;
 		//(2)
 		for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
 			cur_CQ = &state->CQ[cq];
-			if (cur_CQ->tag1 == state->wb_port_int[i].tag)
+			if (cur_CQ->tag1 == state->wb_port_int[i].tag) //////// <===== problematic, need more cond
 				cur_CQ->tag1 = -1;
-			if (cur_CQ->tag2 == state->wb_port_int[i].tag)
+			if (cur_CQ->tag2 == state->wb_port_int[i].tag) //////// <===== problematic, need more cond
 				cur_CQ->tag2 = -1;
 			if ((cur_CQ->store) && (cur_CQ->tag1 == -1) && (cur_CQ->tag2 == -1))
 				state->ROB[cur_CQ->ROB_index].completed = TRUE;
@@ -517,12 +554,14 @@ memory_disambiguation(state_t *state) {
 	// control instr's wb slot is branch_tag; instr move to this field when complete
 	// no need for arbitration of branch_tag, since only one control instr possibly in-flight
 
-	int cq, cq2, is_int, issue = 0, use_imm, rob, forward, issue_ret, val;
+	int cq, cq2, is_int, issue = 0, use_imm, rob, forward, issue_ret, val, reg;
 	CQ_t *cur_CQ, *cur_CQ2;
 	ROB_t *cur_ROB;
 	const op_info_t *op_info;
 
 	dprintf(" [M]\n");
+	if (cc==11)
+		cc = cc;
 
 	for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
 		// not ready, try next
@@ -532,6 +571,15 @@ memory_disambiguation(state_t *state) {
 		if (cur_CQ->store) {
 			// store
 			issue = 1; // issue immediately
+			reg = get_dest_reg_idx(cur_CQ->instr, &is_int);
+			if (is_int) {
+				if (state->rf_int.tag[reg] != -1)
+					issue = 2; // stalled issue (only advance CQ_head, set issued as TRUE)
+			} else {
+				if (state->rf_fp.tag[reg] != -1)
+					issue = 2; // stalled issue (only advance CQ_head, set issued as TRUE)
+			}
+			//issue = 1; 
 			break;
 		} else {
 			// load
@@ -608,6 +656,9 @@ memory_disambiguation(state_t *state) {
 				}
 			}
 		}
+	} else if (issue == 2) {
+		cur_CQ->issued = TRUE;
+		state->CQ_head = (state->CQ_head + 1) % CQ_SIZE;
 	}
 }
 
@@ -660,8 +711,6 @@ issue(state_t *state) {
 			if (issue_ret == 0) {
 				dprintf(" [I] issued instr no %d \n", cur_IQ->ROB_index);
 				cur_IQ->issued = TRUE;
-				if (cc==7)
-					cc = cc;
 				// perform operation also
 				// update ROB target & result by perform operation (id fetch_locked, instr is garbage)
 				//get_operands(state, cur_IQ->instr, &op1, &op2);
@@ -699,9 +748,6 @@ dispatch(state_t *state) {
 	operand_t operand1, operand2;
 
 	dprintf(" [D]\n");
-
-	if (cc==4)
-		cc = cc;
 
 	op_info = decode_instr(state->if_id.instr, &use_imm);
 	if (op_info->fu_group_num == FU_GROUP_NONE) // NOP
