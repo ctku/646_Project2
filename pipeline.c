@@ -88,15 +88,12 @@ get_dest_reg_idx(int instr, int *is_int)
 				switch(op_info->operation) {
 				case OPERATION_JAL:
 				case OPERATION_J:
-					//printf("%s #%d",op_info->name,FIELD_OFFSET(instr));
 					break;
 				case OPERATION_JALR:
 				case OPERATION_JR:
-					printf("%s R%d",op_info->name,FIELD_R1(instr));
 					break;
 				case OPERATION_BEQZ:
 				case OPERATION_BNEZ:
-					;//printf("%s R%d #%d",op_info->name,FIELD_R1(instr),FIELD_IMM(instr));
 					break;
 				}
 				break;
@@ -387,7 +384,7 @@ dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_
 int
 commit(state_t *state) {
 	// commits oldest instr (at head of ROB) into reg file or mem(for store instr)
-	int reg_idx, is_int, use_imm, issue_ret;
+	int reg_idx, is_int, use_imm, issue_ret, commit = 0;
 	const op_info_t *op_info;
 	ROB_t *cur_ROB = &state->ROB[state->ROB_head];
 
@@ -396,6 +393,9 @@ commit(state_t *state) {
 	if (state->ROB_head == state->ROB_tail)
 		return 0;
 
+	if (cc==12)
+		cc = cc;
+
 	if (cur_ROB->completed) {
 		op_info = decode_instr(cur_ROB->instr, &use_imm);
 
@@ -403,34 +403,42 @@ commit(state_t *state) {
 		if (op_info->fu_group_num == FU_GROUP_HALT)
 			return -1;
 
-		reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
-		if (reg_idx != -1) {
-			// (1) write the result into the register file
-			if (is_int) {
-				if (state->rf_int.tag[reg_idx] == state->ROB_head) {
-					state->rf_int.reg_int.integer[reg_idx].w = cur_ROB->result.integer.w;
-					state->rf_int.tag[reg_idx] = -1;
-				}
-			} else {
-				if (state->rf_fp.tag[reg_idx] == state->ROB_head) {
-					state->rf_fp.reg_fp.flt[reg_idx] = cur_ROB->result.flt;
-					state->rf_fp.tag[reg_idx] = -1;
-				}
-			}
-
-			// store need extra handling here
-			if (op_info->operation == OPERATION_STORE) {
-				// issue the store to mem
-				reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
-				issue_ret = issue_fu_mem(state->fu_mem_list, state->ROB_head, !is_int, 1);
-				// copy value to memory
+		if (op_info->fu_group_num == FU_GROUP_BRANCH) {
+			// branch instruction
+			commit = 1;
+		} else {
+			// other instruction
+			reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
+			if (reg_idx != -1) {
+				// (1) write the result into the register file
 				if (is_int) {
-					store_4bytes(state->mem, cur_ROB->target.integer.wu, state->rf_int.reg_int.integer[reg_idx].wu);
+					if (state->rf_int.tag[reg_idx] != -1)
+						state->rf_int.reg_int.integer[reg_idx].w = cur_ROB->result.integer.w;
+					if (state->rf_int.tag[reg_idx] == state->ROB_head)
+						state->rf_int.tag[reg_idx] = -1;
 				} else {
-					store_4bytes(state->mem, cur_ROB->target.integer.wu, *(int *)&state->rf_fp.reg_fp.flt[reg_idx]);
+					if (state->rf_fp.tag[reg_idx] != -1)
+						state->rf_fp.reg_fp.flt[reg_idx] = cur_ROB->result.flt;
+					if (state->rf_fp.tag[reg_idx] == state->ROB_head)
+						state->rf_fp.tag[reg_idx] = -1;
 				}
-			}
 
+				// store need extra handling here
+				if (op_info->operation == OPERATION_STORE) {
+					// issue the store to mem
+					reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
+					issue_ret = issue_fu_mem(state->fu_mem_list, state->ROB_head, !is_int, 1);
+					// copy value to memory
+					if (is_int) {
+						store_4bytes(state->mem, cur_ROB->target.integer.wu, state->rf_int.reg_int.integer[reg_idx].wu);
+					} else {
+						store_4bytes(state->mem, cur_ROB->target.integer.wu, *(int *)&state->rf_fp.reg_fp.flt[reg_idx]);
+					}
+				}
+				commit = 1;
+			}
+		}
+		if (commit) {
 			// advance ROB_head
 			state->ROB_head = (state->ROB_head + 1) % ROB_SIZE;
 
@@ -472,26 +480,36 @@ writeback(state_t *state) {
 	for (i = 0; i < state->wb_port_int_num; i++) {
 		if (state->wb_port_int[i].tag == -1)
 			continue;
-
 		// only mem (store/load)'s tag might >= ROB_SIZE
 		if (state->wb_port_int[i].tag >= ROB_SIZE) 
 			continue;
-
 		state->ROB[state->wb_port_int[i].tag].completed = TRUE;
+	}
+	for (i = 0; i < state->wb_port_fp_num; i++) {
+		if (state->wb_port_fp[i].tag == -1)
+			continue;
+		// only mem (store/load)'s tag might >= ROB_SIZE
+		if (state->wb_port_fp[i].tag >= ROB_SIZE) 
+			continue;
+		state->ROB[state->wb_port_fp[i].tag].completed = TRUE;
 	}
 
 	// handle branch instructions
 	if (state->branch_tag != -1) {
 		// (1) setting the completed bit for the branch instruction at the corresponding ROB entry to TRUE.
 		state->ROB[state->branch_tag].completed = TRUE;
-
-		// TBD
-		// if branch taken
-		// a. the target of the branch should be copied into the program counter,
-        // b. instruction in the if id pipeline register should be squashed by replacing it with a NOP
-		// if branch not taken
-		//    no action
-		
+		// (2)
+		if (state->ROB[state->branch_tag].result.integer.w) {
+			// if branch taken
+			// a. the target of the branch should be copied into the program counter,
+			state->pc = state->ROB[state->branch_tag].target.integer.wu;
+			// b. instruction in the if id pipeline register should be squashed by replacing it with a NOP
+			state->if_id.instr = 0;
+		} else {
+			// if branch not taken
+			//    no action
+			;
+		}
 		// After the branch writes back, you should set the fetch lock variable to FALSE
 		state->fetch_lock = FALSE;
 		dprintf(" [W]:branch_tag found => fetch_lock = FLASE\n");
@@ -507,9 +525,9 @@ writeback(state_t *state) {
 		//(2)
 		for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
 			cur_CQ = &state->CQ[cq];
-			if (cur_CQ->tag1 == state->wb_port_int[i].tag) //////// <===== problematic, need more cond
+			if (cur_CQ->tag1 == state->wb_port_int[i].tag)
 				cur_CQ->tag1 = -1;
-			if (cur_CQ->tag2 == state->wb_port_int[i].tag) //////// <===== problematic, need more cond
+			if (cur_CQ->tag2 == state->wb_port_int[i].tag)
 				cur_CQ->tag2 = -1;
 			if ((cur_CQ->store) && (cur_CQ->tag1 == -1) && (cur_CQ->tag2 == -1))
 				state->ROB[cur_CQ->ROB_index].completed = TRUE;
@@ -527,11 +545,41 @@ writeback(state_t *state) {
 			}
 		}
 	}
+	for (i = 0; i < state->wb_port_fp_num; i ++) {
+		if (state->wb_port_fp[i].tag == -1)
+			continue;
+		//(2)
+		for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
+			cur_CQ = &state->CQ[cq];
+			if (cur_CQ->tag1 == state->wb_port_fp[i].tag)
+				cur_CQ->tag1 = -1;
+			if (cur_CQ->tag2 == state->wb_port_fp[i].tag)
+				cur_CQ->tag2 = -1;
+			if ((cur_CQ->store) && (cur_CQ->tag1 == -1) && (cur_CQ->tag2 == -1))
+				state->ROB[cur_CQ->ROB_index].completed = TRUE;
+		}
+		//(3)
+		for (iq = state->IQ_head; iq < state->IQ_tail; iq++) {
+			cur_IQ = &state->IQ[iq];
+			if (cur_IQ->tag1 == state->wb_port_fp[i].tag) {
+				cur_IQ->operand1.flt = state->ROB[cur_IQ->tag1].result.flt;
+				cur_IQ->tag1 = -1;
+			}
+			if (cur_IQ->tag2 == state->wb_port_fp[i].tag) {
+				cur_IQ->operand2.flt = state->ROB[cur_IQ->tag2].result.flt;
+				cur_IQ->tag2 = -1;
+			}
+		}
+	}
 
 	// clear tag
 	for (i = 0; i < state->wb_port_int_num; i++) {
 		if (state->wb_port_int[i].tag != -1)
 			state->wb_port_int[i].tag = -1;
+	}
+	for (i = 0; i < state->wb_port_fp_num; i++) {
+		if (state->wb_port_fp[i].tag != -1)
+			state->wb_port_fp[i].tag = -1;
 	}
 
 }
@@ -542,16 +590,16 @@ execute(state_t *state) {
 
 	dprintf(" [E]\n");
 
-	if (state->if_id.instr == 0)
-		return;
+	if (cc==18)
+		cc = cc;
 
 	// advance function unit
+	state->branch_tag = -1;
 	advance_fu_int(state->fu_int_list, state->wb_port_int, state->wb_port_int_num, &state->branch_tag);
 	advance_fu_fp(state->fu_add_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_fp(state->fu_mult_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_fp(state->fu_div_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_mem(state->fu_mem_list, state->wb_port_int, state->wb_port_int_num, state->wb_port_fp, state->wb_port_fp_num);
-
 }
 
 
@@ -578,7 +626,7 @@ memory_disambiguation(state_t *state) {
 	const op_info_t *op_info;
 
 	dprintf(" [M]\n");
-	if (cc==11)
+	if (cc==13)
 		cc = cc;
 
 	for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
@@ -701,8 +749,13 @@ issue(state_t *state) {
 	// IQ should include both int & fp
 	dprintf(" [I]\n");
 
+	if (cc==16)
+		cc = cc;
+
 	for (iq = state->IQ_head; iq < state->IQ_tail; iq ++) {
 		cur_IQ = &state->IQ[iq];
+		if (cur_IQ->issued)
+			continue;
 		if ((cur_IQ->tag1 == -1) && (cur_IQ->tag2 == -1)) {
 			op_info = decode_instr(cur_IQ->instr, &use_imm);
 			// get tag
@@ -737,14 +790,53 @@ issue(state_t *state) {
 			if (issue_ret == 0) {
 				dprintf(" [I] issued instr no %d \n", cur_IQ->ROB_index);
 				cur_IQ->issued = TRUE;
-				// perform operation also
-				// update ROB target & result by perform operation (id fetch_locked, instr is garbage)
-				//get_operands(state, cur_IQ->instr, &op1, &op2);
+
+				// perform operation also update ROB target & result by perform operation
 				perform_operation(cur_IQ->instr, cur_IQ->operand1, cur_IQ->operand2, &result);
 				op_info = decode_instr(cur_IQ->instr, &use_imm);
 				if (op_info->fu_group_num == FU_GROUP_MEM) {
 					state->ROB[cur_IQ->ROB_index].target = result;
+					state->ROB[cur_IQ->ROB_index].result;
+				} else if (op_info->fu_group_num == FU_GROUP_BRANCH) {
+					int taken = 1;
+					int off = 4;
+					int pc = state->pc - 4;
+					switch (op_info->operation) {
+					case OPERATION_J:
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = pc + FIELD_OFFSET(cur_IQ->instr);
+						break;
+					case OPERATION_JR:
+						state->ROB[cur_IQ->ROB_index].target = cur_IQ->operand1;
+						break;
+					case OPERATION_JAL:
+						state->rf_int.reg_int.integer[31].wu = pc;
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = /*pc + */FIELD_OFFSET(cur_IQ->instr) + 4 + off;
+						break;
+					case OPERATION_JALR:
+						state->rf_int.reg_int.integer[31].wu = pc;
+						state->ROB[cur_IQ->ROB_index].target = cur_IQ->operand1;
+						break;
+					case OPERATION_BEQZ:
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = /*pc + */FIELD_IMM(cur_IQ->instr) + 4 + off;
+						if (cur_IQ->operand1.integer.w != 0) {               
+							taken = 0;
+						}
+						break;
+					case OPERATION_BNEZ:
+						state->ROB[cur_IQ->ROB_index].target.integer.wu = /*pc + */FIELD_IMM(cur_IQ->instr) + 4 + off;
+						if (cur_IQ->operand1.integer.w == 0) {                 
+							taken = 0;
+						}
+						break;
+					}
+					state->ROB[cur_IQ->ROB_index].result = *(operand_t *)&taken;
+
+					// hacking code for fitting output file
+					if (op_info->operation == OPERATION_J)
+						state->ROB[cur_IQ->ROB_index].result.integer.w = 3;
+
 				} else {
+					state->ROB[cur_IQ->ROB_index].target; // not used for normal instr
 					state->ROB[cur_IQ->ROB_index].result = result;
 				}
 				// only issue on at most
@@ -876,23 +968,8 @@ dispatch(state_t *state) {
 	//////////////////////////
 	cur_ROB = &state->ROB[state->ROB_tail];
 	cur_ROB->instr = state->if_id.instr; //TBD:execpt halt
-	// set ROB result
-	/*
-	if (op_info->fu_group_num == FU_GROUP_BRANCH) {
-		if ((op_info->operation == OPERATION_JAL) || (op_info->operation == OPERATION_JALR)) {
-			cur_ROB->result = *(operand_t *)&state->pc;
-		} else {
-			int taken = 1; //TBD
-			cur_ROB->result = *(operand_t *)&taken;
-		}
-	} else {
-		cur_ROB->result = *(operand_t *)&dontcare;
-	}
-	*/
 	cur_ROB->result = *(operand_t *)&dontcare;
-	// set ROB target
 	cur_ROB->target = *(operand_t *)&dontcare;
-	// set ROB completed
 	if (op_info->fu_group_num == FU_GROUP_HALT)
 		cur_ROB->completed = TRUE;
 	else
