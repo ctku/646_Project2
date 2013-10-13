@@ -40,6 +40,13 @@ floating writeback ports:
 branch PC update:
 ROB:
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [D]
+ [F]
 
 
 *** CYCLE 1
@@ -82,6 +89,13 @@ floating writeback ports:
 branch PC update:
 ROB:
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [D]
+ [F]
 
 
 *** CYCLE 2
@@ -127,6 +141,14 @@ branch PC update:
 ROB:
 		0  LW R1 (28)R0  NOT COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [I] issued instr no 0 
+ [D]
+ [F]
 
 
 *** CYCLE 3
@@ -175,6 +197,14 @@ ROB:
 		0  LW R1 (28)R0  NOT COMPLETED
 		1  LW R2 (32)R0  NOT COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [I] issued instr no 1 
+ [D]
+ [F]
 
 
 *** CYCLE 4
@@ -226,6 +256,14 @@ ROB:
 		1  LW R2 (32)R0  NOT COMPLETED
 		2  LW R3 (36)R0  NOT COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [I] issued instr no 2 
+ [D]
+ [F]
 
 
 *** CYCLE 5
@@ -278,6 +316,13 @@ ROB:
 		2  LW R3 (36)R0  NOT COMPLETED
 		3  ADD R4 R1 R2  NOT COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [D]
+ [F]
 
 
 *** CYCLE 6
@@ -331,6 +376,13 @@ ROB:
 		3  ADD R4 R1 R2  NOT COMPLETED
 		4  SUB R5 R4 R3  NOT COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [D]
+ [F]
 
 
 *** CYCLE 7
@@ -385,6 +437,15 @@ ROB:
 		4  SUB R5 R4 R3  NOT COMPLETED
 		5  SW R5 (40)R0  NOT COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [I] issued instr no 3 
+ [D]
+ [D]:Halt found => fetch_lock = HALT
+ [F]
 
 
 *** CYCLE 8
@@ -438,6 +499,12 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [I] issued instr no 5 
 
 
 *** CYCLE 9
@@ -490,6 +557,12 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
+ [I] issued instr no 4 
 
 
 *** CYCLE 10
@@ -539,6 +612,11 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
 
 
 *** CYCLE 11
@@ -586,6 +664,11 @@ ROB:
 		5  SW R5 (40)R0  NOT COMPLETED
 		6  HALT  COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
 
 
 *** CYCLE 12
@@ -631,6 +714,11 @@ ROB:
 		5  SW R5 (40)R0  COMPLETED
 		6  HALT  COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
 
 
 *** CYCLE 13
@@ -675,6 +763,11 @@ ROB:
 		5  SW R5 (40)R0  COMPLETED
 		6  HALT  COMPLETED
 
+ [C]
+ [W]
+ [E]
+ [M]
+ [I]
 
 
 *** CYCLE 14
@@ -719,6 +812,7 @@ branch PC update:
 ROB:
 		6  HALT  COMPLETED
 
+ [C]
 SIMULATION COMPLETE!
 COMMITTED 7 INSTRUCTIONS IN 14 CYCLES
 CPI:  2.00

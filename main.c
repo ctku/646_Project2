@@ -59,7 +59,7 @@ main(int argc, char *argv[]) {
     commit_ret = commit(state);
 	if (commit_ret != 0)
 		num_insn ++;
-	if (commit_ret == -1)
+	if ((commit_ret == -1) || (i==204))
 		break;
 
     writeback(state);

@@ -10,6 +10,7 @@
 #include "fu.h"
 #include "pipeline.h"
 #include <string.h>
+#include <assert.h>
 
 void store_4bytes(unsigned char *mem, int idx, int data)
 {
@@ -238,7 +239,7 @@ dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_
 				*op2 = *(operand_t *)&(imm);
 				*tg2 = -1;
 				// dst
-				rf_int->tag[r2] = ROB_idx;
+				rf_int->tag[r2] = (r2 == 0) ? -1 : ROB_idx;
 				break;
 			case FU_GROUP_MEM:
 				// op1 / tg1
@@ -262,7 +263,7 @@ dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_
 				case DATA_TYPE_W:
 					switch(op_info->operation) {
 					case OPERATION_LOAD://LW
-						rf_int->tag[r2] = ROB_idx;
+						rf_int->tag[r2] = (r2 == 0) ? -1 : ROB_idx;
 						break;
 					case OPERATION_STORE://SW
 						// ?
@@ -284,10 +285,13 @@ dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_
 			case FU_GROUP_BRANCH:
 				switch(op_info->operation) {
 				case OPERATION_J:
-				case OPERATION_JAL:
 					break;
-				case OPERATION_JR:
+				case OPERATION_JAL:
+					rf_int->tag[31] = ROB_idx;
+					break;
 				case OPERATION_JALR:
+					rf_int->tag[31] = ROB_idx;
+				case OPERATION_JR:
 				case OPERATION_BEQZ:
 				case OPERATION_BNEZ:
 					// op1 / tg1
@@ -341,7 +345,7 @@ dispatch_get_operands_with_register_renaming(state_t *state, int instr, int ROB_
 					}
 				}
 				// dst
-				rf_int->tag[r3] = ROB_idx;
+				rf_int->tag[r3] = (r3 == 0) ? -1 : ROB_idx;
 				break;
 			case FU_GROUP_ADD:
 			case FU_GROUP_MULT:
@@ -476,6 +480,24 @@ writeback(state_t *state) {
 		state->ROB[state->wb_port_int[i].tag].completed = TRUE;
 	}
 
+	// handle branch instructions
+	if (state->branch_tag != -1) {
+		// (1) setting the completed bit for the branch instruction at the corresponding ROB entry to TRUE.
+		state->ROB[state->branch_tag].completed = TRUE;
+
+		// TBD
+		// if branch taken
+		// a. the target of the branch should be copied into the program counter,
+        // b. instruction in the if id pipeline register should be squashed by replacing it with a NOP
+		// if branch not taken
+		//    no action
+		
+		// After the branch writes back, you should set the fetch lock variable to FALSE
+		state->fetch_lock = FALSE;
+		dprintf(" [W]:branch_tag found => fetch_lock = FLASE\n");
+	}
+
+
 	//If a match is found, deposit the result
 	//of the instruction into the appropriate operand field in the IQ or CQ, and set the corresponding
 	//tag field to -1, signaling to the issue stage that this operand is now ready.
@@ -517,10 +539,6 @@ writeback(state_t *state) {
 
 void
 execute(state_t *state) {
-	int branch_tag;
-	operand_t op1, op2, result;
-	int tag1, tag2, use_imm, i, val;
-	const op_info_t *op_info;
 
 	dprintf(" [E]\n");
 
@@ -528,7 +546,7 @@ execute(state_t *state) {
 		return;
 
 	// advance function unit
-	advance_fu_int(state->fu_int_list, state->wb_port_int, state->wb_port_int_num, &branch_tag);
+	advance_fu_int(state->fu_int_list, state->wb_port_int, state->wb_port_int_num, &state->branch_tag);
 	advance_fu_fp(state->fu_add_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_fp(state->fu_mult_list, state->wb_port_fp, state->wb_port_fp_num);
 	advance_fu_fp(state->fu_div_list, state->wb_port_fp, state->wb_port_fp_num);
@@ -611,9 +629,8 @@ memory_disambiguation(state_t *state) {
 		issue_ret = issue_fu_mem(state->fu_mem_list, cur_CQ->ROB_index, !is_int, cur_CQ->store);
 		if (issue_ret == 0) {
 			cur_CQ->issued = TRUE;
-			state->CQ_head = (state->CQ_head + 1) % CQ_SIZE;
-			op_info = decode_instr(cur_CQ->instr, &use_imm);
 
+			op_info = decode_instr(cur_CQ->instr, &use_imm);
 			if (cur_CQ->store) {
 				// store
 				// Hence, when issuing a store in the memory disambiguation stage, 
@@ -658,7 +675,16 @@ memory_disambiguation(state_t *state) {
 		}
 	} else if (issue == 2) {
 		cur_CQ->issued = TRUE;
-		state->CQ_head = (state->CQ_head + 1) % CQ_SIZE;
+	}
+
+	// adjust CQ_head
+	for (cq = state->CQ_head; cq < state->CQ_tail; cq ++) {
+		if (state->CQ[cq].issued) {
+			state->CQ_head = (state->CQ_head + 1) % CQ_SIZE;
+		} else {
+			// advance stop once an unissued instruction is encountered
+			break;
+		}
 	}
 }
 
@@ -707,7 +733,7 @@ issue(state_t *state) {
 				issue_ret = issue_fu_fp(state->fu_div_list, tag);
 				break;
 			}
-			// issue at most one instruction? no
+			// issue at most one instruction
 			if (issue_ret == 0) {
 				dprintf(" [I] issued instr no %d \n", cur_IQ->ROB_index);
 				cur_IQ->issued = TRUE;
@@ -721,6 +747,8 @@ issue(state_t *state) {
 				} else {
 					state->ROB[cur_IQ->ROB_index].result = result;
 				}
+				// only issue on at most
+				break;
 			}
 		}
 	}
@@ -730,6 +758,7 @@ issue(state_t *state) {
 		if (state->IQ[iq].issued) {
 			state->IQ_head = (state->IQ_head + 1) % IQ_SIZE;
 		} else {
+			// advance stop once an unissued instruction is encountered
 			break;
 		}
 	}
@@ -745,10 +774,11 @@ dispatch(state_t *state) {
 	ROB_t *cur_ROB;
 	IQ_t *cur_IQ;
 	CQ_t *cur_CQ;
-	operand_t operand1, operand2;
+	operand_t operand1, operand2, dontcare;
 
 	dprintf(" [D]\n");
 
+	dontcare.integer.w = 0;
 	op_info = decode_instr(state->if_id.instr, &use_imm);
 	if (op_info->fu_group_num == FU_GROUP_NONE) // NOP
 		return 0;
@@ -761,6 +791,9 @@ dispatch(state_t *state) {
 	//     (2) use computed addr to access mem : placed in CQ
 	// IQ,ROB,CQ: circular queues, head(instr to enter), tail(instr to leave)
 
+	//////////////////////////
+	// Handle CQ
+	//////////////////////////
 	// in CQ: (for store & load only)
 	if (op_info->fu_group_num == FU_GROUP_MEM) {
 		cur_CQ = &state->CQ[state->CQ_tail];
@@ -784,12 +817,15 @@ dispatch(state_t *state) {
 				}
 			}
 		}
+		assert(((state->CQ_tail+1) % CQ_SIZE) != state->CQ_head);
 		state->CQ_tail = (state->CQ_tail+1) % CQ_SIZE;
 	}
 
+	//////////////////////////
+	// Handle IQ
+	//////////////////////////
 	// HALT should not put in IQ.
 	if (op_info->fu_group_num != FU_GROUP_HALT) {
-
 		// in IQ: (instr should be inserted at tail, IQ_tail=(IQ_tail+1)%IQ_SIZE)
 		//   instr, pc: no problem
 		//   issued: issued or not (should init as FALSE)
@@ -804,7 +840,9 @@ dispatch(state_t *state) {
 		cur_IQ->operand2 = operand2;
 		cur_IQ->tag1 = tag1;//v TBD (need to assign waited in-flight instr idx in ROB)
 		cur_IQ->tag2 = tag2;//v TBD (need to assign waited in-flight instr idx in ROB)
+		assert(((state->IQ_tail+1) % IQ_SIZE) != state->IQ_head);
 		state->IQ_tail = (state->IQ_tail+1) % IQ_SIZE;
+		
 	}
     // B. register renaming
 	//    by matching tag in IQ,CQ & tag in int/fp reg files
@@ -824,7 +862,6 @@ dispatch(state_t *state) {
 	//       set dest reg's tag in reg file to ROB_index of the dispached instr.
 	//    3. incerment IQ_tail%IQ_SIZE
 
-
 	// in ROB:
 	//  instr: instruction
 	//  completed: in dispatch always FALSE, except "halt"
@@ -833,29 +870,46 @@ dispatch(state_t *state) {
 	//           used for contrl instr: instr's target addr 
 	//                                  (link addr for jump-and-link instr, or "taken or not taken" for cond. branch)
 	//           and for mem instr: effective addr
-	// => ROB_tail=(ROB_tail+1) mode ROB_SIZE
+
+	//////////////////////////
+	// Handle ROB
+	//////////////////////////
 	cur_ROB = &state->ROB[state->ROB_tail];
 	cur_ROB->instr = state->if_id.instr; //TBD:execpt halt
+	// set ROB result
+	/*
+	if (op_info->fu_group_num == FU_GROUP_BRANCH) {
+		if ((op_info->operation == OPERATION_JAL) || (op_info->operation == OPERATION_JALR)) {
+			cur_ROB->result = *(operand_t *)&state->pc;
+		} else {
+			int taken = 1; //TBD
+			cur_ROB->result = *(operand_t *)&taken;
+		}
+	} else {
+		cur_ROB->result = *(operand_t *)&dontcare;
+	}
+	*/
+	cur_ROB->result = *(operand_t *)&dontcare;
+	// set ROB target
+	cur_ROB->target = *(operand_t *)&dontcare;
+	// set ROB completed
 	if (op_info->fu_group_num == FU_GROUP_HALT)
 		cur_ROB->completed = TRUE;
 	else
 		cur_ROB->completed = FALSE;
-	//cur_ROB->result = NULL;
-	if (op_info->fu_group_num == FU_GROUP_BRANCH) {
-		if ((op_info->operation == OPERATION_JAL) ||
-			(op_info->operation == OPERATION_JALR))
-		cur_ROB->target = *(operand_t *)&state->pc;
-	} else {
-		//cur_ROB->target = NULL;
-	}
+	assert(((state->ROB_tail+1) % ROB_SIZE) != state->ROB_head);
 	state->ROB_tail = (state->ROB_tail+1) % ROB_SIZE;
+
 
 	// check if HALT is found, HALT take effect only when branch is not taken in writeback
 	if (op_info->fu_group_num == FU_GROUP_HALT) {
 		//if (state->branch != TAKEN) {
 			state->fetch_lock = HALT;
-			//dprintf("   [D]:Halt found => fetch_lock = HALT\n");
+			dprintf(" [D]:Halt found => fetch_lock = HALT\n");
 		//}
+	} else if (op_info->fu_group_num == FU_GROUP_BRANCH) {
+		state->fetch_lock = TRUE;
+		dprintf(" [D]:Control cmd found => fetch_lock = TRUE\n");
 	}
 }
 
