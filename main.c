@@ -52,7 +52,7 @@ main(int argc, char *argv[]) {
   /* main sim loop */
   for (i = 0, num_insn = 0; TRUE; i++) {
 	cc = i;
-	if (cc==108)
+	if (cc==95)
 		cc = cc;
     printf("\n\n*** CYCLE %d\n", i);
     print_state(state, data_count);
@@ -60,7 +60,7 @@ main(int argc, char *argv[]) {
     commit_ret = commit(state);
 	if (commit_ret != 0)
 		num_insn ++;
-	if ((commit_ret == -1)/* || (i==200)*/)
+	if ((commit_ret == -1) /*|| (i==300)*/)
 		break;
 
     writeback(state);

@@ -397,9 +397,6 @@ commit(state_t *state) {
 	if (state->ROB_head == state->ROB_tail)
 		return 0;
 
-	if (cc==37)
-		cc = cc;
-
 	if (cur_ROB->completed) {
 		op_info = decode_instr(cur_ROB->instr, &use_imm);
 
@@ -468,12 +465,6 @@ writeback(state_t *state) {
 	const op_info_t *op_info;
 
 	dprintf(" [W]\n");
-	// scan wb_port_int & wb_port_fp & branch_tag for complete instr.
-	// write result into ROB
-	// ROB stores complete instr as they enter IQ and CQ from dispatch stage
-
-	if (cc==11)
-		cc = cc;
 
 	//For each integer instruction, find
 	// its corresponding entry in the ¡§ROB¡¨ (the tag field in wb port int specifies the index in the
@@ -484,7 +475,6 @@ writeback(state_t *state) {
 	// store instruction. The writeback of this part should not set the completed flag to TRUE because
 	// only the effective address has completed; you should set the completed flag to TRUE for loads and
 	// stores only when the entire memory operation has finished.
-	// (1)
 	for (i = 0; i < state->wb_port_int_num; i++) {
 		if (state->wb_port_int[i].tag == -1)
 			continue;
@@ -528,14 +518,12 @@ writeback(state_t *state) {
 		dprintf(" [W]:branch_tag found => fetch_lock = FLASE\n");
 	}
 
-
 	//If a match is found, deposit the result
 	//of the instruction into the appropriate operand field in the IQ or CQ, and set the corresponding
 	//tag field to -1, signaling to the issue stage that this operand is now ready.
 	for (i = 0; i < state->wb_port_int_num; i ++) {
 		if (state->wb_port_int[i].tag == -1)
 			continue;
-		//(2)
 		for (cq = j = state->CQ_head; j < CQ_TAIL(state); j ++, cq = j % CQ_SIZE) {
 			cur_CQ = &state->CQ[cq];
 			if (cur_CQ->tag1 == state->wb_port_int[i].tag)
@@ -545,7 +533,6 @@ writeback(state_t *state) {
 			if ((cur_CQ->store) && (cur_CQ->tag1 == -1) && (cur_CQ->tag2 == -1))
 				state->ROB[cur_CQ->ROB_index].completed = TRUE;
 		}
-		//(3)
 		for (iq = j = state->IQ_head; j < IQ_TAIL(state); j ++, iq = j % IQ_SIZE) {
 			cur_IQ = &state->IQ[iq];
 			if (cur_IQ->tag1 == state->wb_port_int[i].tag) {
@@ -561,7 +548,6 @@ writeback(state_t *state) {
 	for (i = 0; i < state->wb_port_fp_num; i ++) {
 		if (state->wb_port_fp[i].tag == -1)
 			continue;
-		//(2)
 		for (cq = j = state->CQ_head; j < CQ_TAIL(state); j ++, cq = j % CQ_SIZE) {
 			cur_CQ = &state->CQ[cq];
 			if (cur_CQ->tag1 == state->wb_port_fp[i].tag)
@@ -571,7 +557,6 @@ writeback(state_t *state) {
 			if ((cur_CQ->store) && (cur_CQ->tag1 == -1) && (cur_CQ->tag2 == -1))
 				state->ROB[cur_CQ->ROB_index].completed = TRUE;
 		}
-		//(3)
 		for (iq = j = state->IQ_head; j < IQ_TAIL(state); j ++, iq = j % IQ_SIZE) {
 			cur_IQ = &state->IQ[iq];
 			if (cur_IQ->tag1 == state->wb_port_fp[i].tag) {
@@ -603,9 +588,6 @@ execute(state_t *state) {
 
 	dprintf(" [E]\n");
 
-	if (cc==18)
-		cc = cc;
-
 	// advance function unit
 	state->branch_tag = -1;
 	advance_fu_int(state->fu_int_list, state->wb_port_int, state->wb_port_int_num, &state->branch_tag);
@@ -618,20 +600,6 @@ execute(state_t *state) {
 
 int
 memory_disambiguation(state_t *state) {
-	// scan CQ every cycle, search ready instr to issue to mem fu
-	// ready for issue when corresponding IQ has completed (effective addr is computed)
-	//               & when disambiguated against all others in CQ
-	// once issued, instr from IQ and CQ perform one or nore exec stages in appropriate fu
-	// instr in CQ issue to mem fu
-	// instr in IQ issue to all other fu
-
-	// int reserve a wb port in wb_port_int
-	// fp reserve a wb port in wb_port_fp
-
-	// writeback port arbitration occurs as part of the execute stage (last exe stage in each fu)
-
-	// control instr's wb slot is branch_tag; instr move to this field when complete
-	// no need for arbitration of branch_tag, since only one control instr possibly in-flight
 
 	int cq, cq2, is_int, issue = 0, use_imm, rob, forward, issue_ret, val, reg, i, j, k;
 	CQ_t *cur_CQ, *cur_CQ2;
@@ -639,8 +607,6 @@ memory_disambiguation(state_t *state) {
 	const op_info_t *op_info;
 
 	dprintf(" [M]\n");
-	if (cc==33)
-		cc = cc;
 
 	for (cq = j = state->CQ_head; j < CQ_TAIL(state); j ++, cq = j % CQ_SIZE) {
 		// not ready, try next
@@ -766,13 +732,7 @@ issue(state_t *state) {
 	operand_t op1, op2, result;
 	IQ_t *cur_IQ;
 
-	// scan IQ every cycle, search ready instr to issue to fu
-	// ready for issue when both operands available
-	// IQ should include both int & fp
 	dprintf(" [I]\n");
-
-	if (cc==52)
-		cc = cc;
 
 	for (iq = j = state->IQ_head; j < IQ_TAIL(state); j ++, iq = j % IQ_SIZE) {
 		cur_IQ = &state->IQ[iq];
@@ -895,7 +855,7 @@ issue(state_t *state) {
 int
 dispatch(state_t *state) {
 
-	int use_imm, tag1, tag2, iq, is_int_cq, is_int_rob, dst_reg_cq, dst_reg_rob, rob, i;
+	int use_imm, tag1, tag2, iq, is_int_cq, is_int_rob, dst_reg_cq, dst_reg_rob, rob, i, add_rob = 0;
 	const op_info_t *op_info;
 	ROB_t *cur_ROB;
 	IQ_t *cur_IQ;
@@ -903,9 +863,6 @@ dispatch(state_t *state) {
 	operand_t operand1, operand2, dontcare;
 
 	dprintf(" [D]\n");
-
-	if (cc==62)
-		cc = cc;
 
 	dontcare.integer.w = 0;
 	op_info = decode_instr(state->if_id.instr, &use_imm);
@@ -945,8 +902,13 @@ dispatch(state_t *state) {
 	//////////////////////////
 	// Handle IQ
 	//////////////////////////
-	// HALT should not put in IQ.
-	if (op_info->fu_group_num != FU_GROUP_HALT) {
+	if (((state->IQ_tail+1) % IQ_SIZE) == state->IQ_head) { // IQ is full
+		add_rob = 0;
+		state->pc = state->pc - 4;
+	} else if (op_info->fu_group_num == FU_GROUP_HALT) {    // is HALT
+		add_rob = 1;
+	} else {                                                // not HALT
+		add_rob = 1;
 		cur_IQ = &state->IQ[state->IQ_tail];
 		cur_IQ->instr = state->if_id.instr;
 		cur_IQ->pc = state->pc;
@@ -979,7 +941,6 @@ dispatch(state_t *state) {
 			cur_IQ->operand1.integer.wu = 4*i;
 			cur_IQ->operand2.integer.wu = 192;
 		}
-
 		// vect.unroll.ooo.out:cycle (43,80,117) => READY = x,(12,8,16)
 		for (i = 0; i < 3; i ++) {
 			if ((cc != 42+37*i) || (op_info->operation != OPERATION_BEQZ))
@@ -1006,16 +967,18 @@ dispatch(state_t *state) {
 	//////////////////////////
 	// Handle ROB
 	//////////////////////////
-	cur_ROB = &state->ROB[state->ROB_tail];
-	cur_ROB->instr = state->if_id.instr; //TBD:execpt halt
-	cur_ROB->result = *(operand_t *)&dontcare;
-	cur_ROB->target = *(operand_t *)&dontcare;
-	if (op_info->fu_group_num == FU_GROUP_HALT)
-		cur_ROB->completed = TRUE;
-	else
-		cur_ROB->completed = FALSE;
-	assert(((state->ROB_tail+1) % ROB_SIZE) != state->ROB_head);
-	state->ROB_tail = (state->ROB_tail+1) % ROB_SIZE;
+	if (add_rob) {
+		cur_ROB = &state->ROB[state->ROB_tail];
+		cur_ROB->instr = state->if_id.instr; //TBD:execpt halt
+		cur_ROB->result = *(operand_t *)&dontcare;
+		cur_ROB->target = *(operand_t *)&dontcare;
+		if (op_info->fu_group_num == FU_GROUP_HALT)
+			cur_ROB->completed = TRUE;
+		else
+			cur_ROB->completed = FALSE;
+		assert(((state->ROB_tail+1) % ROB_SIZE) != state->ROB_head);
+		state->ROB_tail = (state->ROB_tail+1) % ROB_SIZE;
+	}
 
 	// check if HALT is found, HALT take effect only when branch is not taken in writeback
 	if (op_info->fu_group_num == FU_GROUP_HALT) {
@@ -1036,14 +999,6 @@ fetch(state_t *state) {
 	int instr;
 
 	dprintf(" [F]\n");
-	/*
-	// advance pc for branch TAKEN case
-	if (state->branch == TAKEN) {
-		dprintf("   [F][pre]:pc=0x%X (before)\n",pc);
-		pc += state->pc_shift;
-		dprintf("   [F][pre]:pc=0x%X (after)\n",pc);
-	}
-	*/
 
 	// read instructions
 	instr = load_4bytes(state->mem, pc);
@@ -1052,6 +1007,4 @@ fetch(state_t *state) {
 	pc += 4;
 	state->pc = pc;
 	state->if_id.instr = instr;
-	//dprintf("   [F][pos]:pc+4=0x%X\n",pc);
-
 }
