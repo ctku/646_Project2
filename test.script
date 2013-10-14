@@ -1,0 +1,23 @@
+make clean
+make asm
+make mipsim
+asm simple.s simple.bin
+asm vect.s vect.bin
+asm newton.s newton.bin
+asm cos.s cos.bin
+asm vect.unroll.s vect.unroll.bin
+\rm simple.my.out
+\rm newton.my.out
+\rm vect.my.out
+\rm cos.my.out
+\rm vect.unroll.my.out
+mipsim -b simple.bin -o ooo_pipe.fu -wbpi 2 -wbpf 2 > simple.my.out
+mipsim -b newton.bin -o ooo_pipe.fu -wbpi 2 -wbpf 2 > newton.my.out
+mipsim -b vect.bin -o ooo_pipe.fu -wbpi 2 -wbpf 2 > vect.my.out
+mipsim -b cos.bin -o ooo_pipe.fu -wbpi 2 -wbpf 2 > cos.my.out
+mipsim -b vect.unroll.bin -o ooo_pipe.fu -wbpi 2 -wbpf 2 > vect.unroll.my.out
+diff simple.my.out simple.ooo.out
+diff newton.my.out newton.ooo.out
+diff vect.my.out vect.ooo.out
+diff vect.unroll.my.out vect.unroll.ooo.out
+diff cos.my.out cos.ooo.out
