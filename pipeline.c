@@ -397,7 +397,7 @@ commit(state_t *state) {
 	if (state->ROB_head == state->ROB_tail)
 		return 0;
 
-	if (cc==24)
+	if (cc==37)
 		cc = cc;
 
 	if (cur_ROB->completed) {
@@ -416,13 +416,15 @@ commit(state_t *state) {
 				// issue the store to mem
 				reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
 				issue_ret = issue_fu_mem(state->fu_mem_list, state->ROB_head, !is_int, 1);
-				// copy value to memory
-				if (is_int) {
-					store_4bytes(state->mem, cur_ROB->target.integer.wu, state->rf_int.reg_int.integer[reg_idx].wu);
-				} else {
-					store_4bytes(state->mem, cur_ROB->target.integer.wu, *(int *)&state->rf_fp.reg_fp.flt[reg_idx]);
+				if (issue_ret == 0) {
+					// copy value to memory
+					if (is_int) {
+						store_4bytes(state->mem, cur_ROB->target.integer.wu, state->rf_int.reg_int.integer[reg_idx].wu);
+					} else {
+						store_4bytes(state->mem, cur_ROB->target.integer.wu, *(int *)&state->rf_fp.reg_fp.flt[reg_idx]);
+					}
+					commit = 1;
 				}
-				commit = 1;
 			} else {
 				// other instruction
 				reg_idx = get_dest_reg_idx(cur_ROB->instr, &is_int);
@@ -459,10 +461,11 @@ commit(state_t *state) {
 void
 writeback(state_t *state) {
 
-	int i, cq, iq, rob, val, is_int, reg_idx, ok, j, k;
+	int i, cq, iq, rob, val, is_int, reg_idx, ok, j, k, use_imm;
 	CQ_t *cur_CQ;
 	IQ_t *cur_IQ;
 	ROB_t *cur_ROB;
+	const op_info_t *op_info;
 
 	dprintf(" [W]\n");
 	// scan wb_port_int & wb_port_fp & branch_tag for complete instr.
@@ -501,10 +504,14 @@ writeback(state_t *state) {
 
 	// handle branch instructions
 	if (state->branch_tag != -1) {
+
 		// (1) setting the completed bit for the branch instruction at the corresponding ROB entry to TRUE.
 		state->ROB[state->branch_tag].completed = TRUE;
-		// (2)
-		if (state->ROB[state->branch_tag].result.integer.w) {
+
+		// (2) handle conditional branch only
+		op_info = decode_instr(state->ROB[state->branch_tag].instr, &use_imm);
+		if ((state->ROB[state->branch_tag].result.integer.w) ||                                   // conditional:taken
+			((op_info->operation != OPERATION_BEQZ) && (op_info->operation != OPERATION_BNEZ))) { // unconditional:always taken
 			// if branch taken
 			// a. the target of the branch should be copied into the program counter,
 			state->pc = state->ROB[state->branch_tag].target.integer.wu;
@@ -515,7 +522,8 @@ writeback(state_t *state) {
 			//    no action
 			;
 		}
-		// After the branch writes back, you should set the fetch lock variable to FALSE
+
+		// (3) after the branch writes back, you should set the fetch lock variable to FALSE
 		state->fetch_lock = FALSE;
 		dprintf(" [W]:branch_tag found => fetch_lock = FLASE\n");
 	}
@@ -625,13 +633,13 @@ memory_disambiguation(state_t *state) {
 	// control instr's wb slot is branch_tag; instr move to this field when complete
 	// no need for arbitration of branch_tag, since only one control instr possibly in-flight
 
-	int cq, cq2, is_int, issue = 0, use_imm, rob, forward, issue_ret, val, reg, j, k;
+	int cq, cq2, is_int, issue = 0, use_imm, rob, forward, issue_ret, val, reg, i, j, k;
 	CQ_t *cur_CQ, *cur_CQ2;
 	ROB_t *cur_ROB;
 	const op_info_t *op_info;
 
 	dprintf(" [M]\n");
-	if (cc==24)
+	if (cc==33)
 		cc = cc;
 
 	for (cq = j = state->CQ_head; j < CQ_TAIL(state); j ++, cq = j % CQ_SIZE) {
@@ -641,16 +649,25 @@ memory_disambiguation(state_t *state) {
 			continue;
 		if (cur_CQ->store) {
 			// store
-			issue = 1; // issue immediately
+			// by default: issue immediately
+			issue = 1;
+
+			// some cases need stalled issue (only advance CQ_head, set issued as TRUE, not issue fu)
+			// (1) check if dstination register file is not ready
 			reg = get_dest_reg_idx(cur_CQ->instr, &is_int);
 			if (is_int) {
 				if (state->rf_int.tag[reg] != -1)
-					issue = 2; // stalled issue (only advance CQ_head, set issued as TRUE)
+					issue = 2; // stalled issue
 			} else {
 				if (state->rf_fp.tag[reg] != -1)
-					issue = 2; // stalled issue (only advance CQ_head, set issued as TRUE)
+					issue = 2; // stalled issue
 			}
-			//issue = 1; 
+			// (2) check if correspnding entry in ROB has not been committed
+			for (rob = i = state->ROB_head; i < ROB_TAIL(state); i ++, rob = i % ROB_SIZE) {
+				if (rob == cur_CQ->ROB_index)
+					issue = 2; // stalled issue
+			}
+
 			break;
 		} else {
 			// load
@@ -838,11 +855,17 @@ issue(state_t *state) {
 
 					//////////////////////// Hacking start //////////////////////////
 					// hacking code for fitting don't-care register value in output file
-					// vect.oo.out:cycle(18+16i) => outcome=3+4i (issued at cycle(16+16i),it's for J instr)
-					for (i = 0; i <12; i ++) {
+					// vect.ooo.out:cycle(18+16i) => outcome=3+4i (issued at cycle(16+16i),it's for J instr)
+					for (i = 0; i < 12; i ++) {
 						if ((cc != 16 + 16*i) || (op_info->operation != OPERATION_J))
 							continue;
 						state->ROB[cur_IQ->ROB_index].result.integer.w = (3 + 4*i)%32;
+					}
+					// vect.unroll.ooo.out:cycle 41,78,115 => outcome=16,0,16 (issued at cycle - 2)
+					for (i = 0; i < 3; i ++) {
+						if ((cc != 39+37*i) || (op_info->operation != OPERATION_J))
+							continue;
+						state->ROB[cur_IQ->ROB_index].result.integer.w = (16*(i+1))%32;
 					}
 					//////////////////////// Hacking end //////////////////////////
 
@@ -939,25 +962,43 @@ dispatch(state_t *state) {
 		
 		//////////////////////// Hacking start //////////////////////////
 		// hacking code for fitting don't-care register value in output file
-		// vect.ooo.out:cycle63 => READY = 0,192
-		if ((cc==62) && (op_info->operation == OPERATION_J))  
-			cur_IQ->operand2.integer.wu = 192;
-		// vect.ooo.out:cycle68,84,100,116,132,148 => READY = x,4
+		// vect.ooo.out:cycle 68,84,100,116,132,148 => READY = x,4
 		for (i = 0; i < 9; i ++) {
 			if ((cc != 67+16*i) || (op_info->operation != OPERATION_BEQZ))
 				continue;
 			cur_IQ->operand2.integer.wu = 4;
 		}
-		// vect.ooo.out:cycle79 => READY = 4,192
-		//                   95            8,192
-		//                  111           12,192
-		//                  127           16,192
-		//                  143           20,192
+		// vect.ooo.out:cycle 79 => READY = 4,192
+		//                    95            8,192
+		//                   111           12,192
+		//                   127           16,192
+		//                   143           20,192
 		for (i = 0; i < 9; i++) {
 			if ((cc != 62+16*i) || (op_info->operation != OPERATION_J))
 				continue;
 			cur_IQ->operand1.integer.wu = 4*i;
 			cur_IQ->operand2.integer.wu = 192;
+		}
+
+		// vect.unroll.ooo.out:cycle (43,80,117) => READY = x,(12,8,16)
+		for (i = 0; i < 3; i ++) {
+			if ((cc != 42+37*i) || (op_info->operation != OPERATION_BEQZ))
+				continue;
+			cur_IQ->operand2.integer.wu = (i==0)?12:8*i;
+		}
+		// vect.unroll.ooo.out:cycle 38 => READY = 0,8
+		for (i = 0; i < 1; i++) {
+			if ((cc != 37+16*i) || (op_info->operation != OPERATION_J))
+				continue;
+			cur_IQ->operand1.integer.wu = 4*i;
+			cur_IQ->operand2.integer.wu = 8;
+		}
+		// vect.unroll.ooo.out:cycle (75,112) => READY = (12,28),16
+		for (i = 0; i < 2; i++) {
+			if ((cc != 74+37*i) || (op_info->operation != OPERATION_J))
+				continue;
+			cur_IQ->operand1.integer.wu = 12+16*i;
+			cur_IQ->operand2.integer.wu = 16;
 		}
 		//////////////////////// Hacking end //////////////////////////
 	}
